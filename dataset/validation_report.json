@@ -1,0 +1,25 @@
+{
+  "validation_date": "2025-08-21",
+  "total_examples": 5170,
+  "errors_found": 0,
+  "validation_status": "PASSED",
+  "tactic_distribution": {
+    "gaslighting": 800,
+    "belittling_ridicule": 800,
+    "guilt_tripping": 276,
+    "ethical_persuasion": 1800,
+    "love_bombing": 322,
+    "threatening_intimidation": 400,
+    "passive_aggression": 99,
+    "deflection": 88,
+    "stonewalling": 250,
+    "whataboutism": 85,
+    "appeal_to_emotion": 250
+  },
+  "data_quality_metrics": {
+    "avg_text_length": 226.5063829787234,
+    "avg_confidence": 0.8932959381044936,
+    "avg_severity": 48.708123791102516
+  },
+  "errors_summary": []
+}

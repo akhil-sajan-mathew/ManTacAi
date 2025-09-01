@@ -1,0 +1,175 @@
+{
+  "analysis_date": "2025-08-21T13:48:15.551515",
+  "dataset_summary": {
+    "total_examples": 9368,
+    "unique_tactics": 11,
+    "data_sources": 12
+  },
+  "structure_analysis": {
+    "total_examples": 9368,
+    "tactic_distribution": {
+      "ethical_persuasion": 3334,
+      "belittling_ridicule": 1465,
+      "guilt_tripping": 460,
+      "love_bombing": 322,
+      "threatening_intimidation": 448,
+      "passive_aggression": 489,
+      "deflection": 460,
+      "gaslighting": 1010,
+      "stonewalling": 460,
+      "appeal_to_emotion": 460,
+      "whataboutism": 460
+    },
+    "source_distribution": {
+      "daily_persuasion": 2334,
+      "jigsaw_filtered": 1719,
+      "synthetic": 70,
+      "movie_dialogue": 545,
+      "gaslighting_train.json": 882,
+      "gaslight_definitions_vettedcomplete_notprocessed.csv_text": 31,
+      "gaslighting_validation.json": 60,
+      "gaslight_stories_train_vettednotprocessed.csv_text": 11,
+      "gaslight_stories_holdout_vettednotprocessed.csv_text": 16,
+      "anti_gaslighting_train.json": 925,
+      "anti_gaslighting_validation.json": 75,
+      "synthetic_comprehensive": 2700
+    },
+    "text_length_stats": {
+      "mean": 181.29419299743807,
+      "median": 90.0,
+      "std": 157.55153115901024,
+      "min": 17,
+      "max": 714,
+      "q25": 50.0,
+      "q75": 362.0
+    },
+    "confidence_stats": {
+      "mean": 0.8820559350982069,
+      "std": 0.05344015333303984,
+      "min": 0.6,
+      "max": 1.0
+    },
+    "severity_stats": {
+      "mean": 69.64318859794498,
+      "std": 13.148376778437404,
+      "min": 35,
+      "max": 85
+    }
+  },
+  "balance_analysis": {
+    "tactic_counts": {
+      "ethical_persuasion": 3334,
+      "belittling_ridicule": 1465,
+      "guilt_tripping": 460,
+      "love_bombing": 322,
+      "threatening_intimidation": 448,
+      "passive_aggression": 489,
+      "deflection": 460,
+      "gaslighting": 1010,
+      "stonewalling": 460,
+      "appeal_to_emotion": 460,
+      "whataboutism": 460
+    },
+    "imbalance_ratio": 10.354037267080745,
+    "coefficient_variation": 0.9954227327160259,
+    "balance_rating": "POOR",
+    "balance_score": 4,
+    "min_examples": 322,
+    "max_examples": 3334,
+    "mean_examples": 851.6363636363636
+  },
+  "quality_analysis": {
+    "quality_issues": {
+      "empty_texts": 0,
+      "very_short_texts": 0,
+      "very_long_texts": 0,
+      "duplicate_texts": 2505,
+      "missing_labels": 0,
+      "low_confidence": 39,
+      "inconsistent_format": 0
+    },
+    "total_issues": 2544,
+    "quality_percentage": 72.84372331340735,
+    "quality_rating": "POOR",
+    "quality_score": 4,
+    "unique_texts": 6863
+  },
+  "diversity_analysis": {
+    "diversity_scores": {
+      "ethical_persuasion": 10,
+      "belittling_ridicule": 10,
+      "guilt_tripping": 10,
+      "love_bombing": 10,
+      "threatening_intimidation": 10,
+      "passive_aggression": 10,
+      "deflection": 10,
+      "gaslighting": 10,
+      "stonewalling": 10,
+      "appeal_to_emotion": 10,
+      "whataboutism": 10
+    },
+    "avg_diversity": 10.0,
+    "coverage_percentage": 100.0,
+    "coverage_rating": "COMPLETE",
+    "coverage_score": 10,
+    "covered_tactics": [
+      "stonewalling",
+      "belittling_ridicule",
+      "threatening_intimidation",
+      "ethical_persuasion",
+      "deflection",
+      "passive_aggression",
+      "whataboutism",
+      "love_bombing",
+      "gaslighting",
+      "appeal_to_emotion",
+      "guilt_tripping"
+    ],
+    "missing_tactics": []
+  },
+  "readiness_analysis": {
+    "total_examples": 9368,
+    "size_rating": "GOOD",
+    "size_score": 8,
+    "splits_available": false,
+    "train_size": 0,
+    "val_size": 0,
+    "test_size": 0,
+    "format_consistent": true,
+    "ready_for_binary": true,
+    "ready_for_multiclass": true,
+    "ready_for_production": true
+  },
+  "overall_rating": {
+    "overall_score": 6.7,
+    "overall_rating": "ADEQUATE",
+    "grade": "B",
+    "component_scores": {
+      "balance": 4,
+      "quality": 4,
+      "coverage": 10,
+      "size": 8,
+      "diversity": 10.0
+    },
+    "weights": {
+      "balance": 0.25,
+      "quality": 0.25,
+      "coverage": 0.2,
+      "size": 0.15,
+      "diversity": 0.15
+    },
+    "strengths": [
+      "Coverage: 10.0/10",
+      "Size: 8.0/10",
+      "Diversity: 10.0/10"
+    ],
+    "weaknesses": [
+      "Balance: 4.0/10",
+      "Quality: 4.0/10"
+    ],
+    "recommendations": [
+      "Improve class balance by adding more examples to underrepresented classes",
+      "Review and clean data quality issues"
+    ]
+  }
+}

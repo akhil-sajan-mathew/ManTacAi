@@ -1,0 +1,40 @@
+# Model Configuration
+model:
+  name: "distilbert-base-uncased"
+  num_classes: 11
+  max_length: 512
+  dropout_rate: 0.1
+
+# Training Configuration
+training:
+  batch_size: 16
+  learning_rate: 2e-5
+  num_epochs: 5
+  warmup_steps: 500
+  weight_decay: 0.01
+  gradient_clip_norm: 1.0
+
+# Data Configuration
+data:
+  dataset_path: "dataset/"
+  train_file: "enhanced_critical_splits.json"
+  validation_split: 0.2
+  test_split: 0.1
+
+# Evaluation Configuration
+evaluation:
+  save_predictions: true
+  generate_plots: true
+  plot_confusion_matrix: true
+
+# Logging Configuration
+logging:
+  log_level: "INFO"
+  save_logs: true
+  tensorboard_dir: "runs/"
+
+# Hardware Configuration
+hardware:
+  use_gpu: true
+  mixed_precision: true
+  num_workers: 4
