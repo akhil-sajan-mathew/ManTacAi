@@ -1,0 +1,8 @@
+.kiro/specs/manipulation-detection-model/design.md
+.kiro/specs/manipulation-detection-model/tasks.md
+.kiro/specs/manipulation-detection-model/requirements.md
+.kiro
+
+# Large model files (use Git LFS or keep locally only)
+*.pt
+models/*.pt
