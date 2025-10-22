@@ -1,0 +1,50 @@
+{
+  "timestamp": "2025-10-22T18:52:13.928965",
+  "dataset_file": "dataset/enhanced_critical_splits.json",
+  "cleaning_operations": [
+    "Remove duplicates",
+    "Review low-confidence labels",
+    "Analyze class distribution",
+    "Calculate class weights",
+    "Create stratified splits"
+  ],
+  "statistics": {
+    "duplicates_removed": 520,
+    "low_confidence_samples": 39,
+    "total_samples_after_cleaning": 4706
+  },
+  "class_distribution": {
+    "ethical_persuasion": 1856,
+    "gaslighting": 800,
+    "belittling_ridicule": 800,
+    "threatening_intimidation": 400,
+    "love_bombing": 322,
+    "guilt_tripping": 99,
+    "passive_aggression": 96,
+    "deflection": 88,
+    "whataboutism": 85,
+    "stonewalling": 80,
+    "appeal_to_emotion": 80
+  },
+  "class_weights": {
+    "appeal_to_emotion": 5.3477,
+    "belittling_ridicule": 0.5348,
+    "deflection": 4.8616,
+    "ethical_persuasion": 0.2305,
+    "gaslighting": 0.5348,
+    "guilt_tripping": 4.3214,
+    "love_bombing": 1.3286,
+    "passive_aggression": 4.4564,
+    "stonewalling": 5.3477,
+    "threatening_intimidation": 1.0695,
+    "whataboutism": 5.0332
+  },
+  "recommendations": [
+    "Remove duplicate texts (done)",
+    "Apply class weights during training (use provided weights)",
+    "Use stratified splits to maintain class distribution",
+    "Monitor low-confidence samples during evaluation",
+    "Consider data augmentation for minority classes",
+    "Collect more examples for underrepresented tactics"
+  ]
+}

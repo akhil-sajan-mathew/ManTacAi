@@ -2,7 +2,7 @@
 Kaggle GPU Training for Enhanced Critical Splits Dataset
 
 This script is optimized for training on Kaggle with GPU acceleration
-using the enhanced_critical_splits.json dataset.
+using the enhanced_critical_splits_augmented.json dataset.
 
 Copy this entire code into a Kaggle notebook cell and run it.
 """
@@ -50,7 +50,7 @@ if torch.cuda.is_available():
 
 
 class EnhancedSplitsDataset(Dataset):
-    """Dataset class for enhanced_critical_splits.json format."""
+    """Dataset class for enhanced_critical_splits_augmented.json format."""
 
     def __init__(self, data_items, tokenizer, max_length=512):
         self.data_items = data_items
@@ -146,7 +146,9 @@ class KaggleManipulationClassifier(nn.Module):
 class KaggleTrainer:
     """Trainer optimized for Kaggle environment."""
 
-    def __init__(self, model, train_loader, val_loader, device, config):
+    def __init__(
+        self, model, train_loader, val_loader, device, config, class_weights=None
+    ):
         self.model = model
         self.train_loader = train_loader
         self.val_loader = val_loader
@@ -168,6 +170,13 @@ class KaggleTrainer:
             num_warmup_steps=config["warmup_steps"],
             num_training_steps=total_steps,
         )
+
+        # Setup loss function with optional class weights
+        if class_weights is not None:
+            self.loss_fn = nn.CrossEntropyLoss(weight=class_weights.to(device))
+            print("✓ Using weighted loss function for imbalanced classes")
+        else:
+            self.loss_fn = nn.CrossEntropyLoss()
 
         # Training history
         self.history = {
@@ -198,9 +207,11 @@ class KaggleTrainer:
 
             # Forward pass
             self.optimizer.zero_grad()
-            outputs = self.model(input_ids, attention_mask, labels)
-            loss = outputs["loss"]
+            outputs = self.model(input_ids, attention_mask, labels=None)
             logits = outputs["logits"]
+
+            # Use the loss function (which may include class weights)
+            loss = self.loss_fn(logits, labels)
 
             # Backward pass
             loss.backward()
@@ -250,9 +261,9 @@ class KaggleTrainer:
                 attention_mask = batch["attention_mask"].to(self.device)
                 labels = batch["labels"].to(self.device)
 
-                outputs = self.model(input_ids, attention_mask, labels)
-                loss = outputs["loss"]
+                outputs = self.model(input_ids, attention_mask, labels=None)
                 logits = outputs["logits"]
+                loss = self.loss_fn(logits, labels)
 
                 total_loss += loss.item()
                 predictions = torch.argmax(logits, dim=-1)
@@ -359,9 +370,9 @@ class KaggleTrainer:
 
 
 def load_enhanced_splits_data(
-    json_path="/kaggle/input/psychological-manipulation-detection-dataset/enhanced_critical_splits.json",
+    json_path="/kaggle/input/psychological-manipulation-detection-dataset/enhanced_critical_splits_augmented.json",
 ):
-    """Load data from enhanced_critical_splits.json on Kaggle."""
+    """Load data from enhanced_critical_splits_augmented.json on Kaggle."""
     print(f"📂 Loading data from: {json_path}")
 
     try:
@@ -391,6 +402,28 @@ def load_enhanced_splits_data(
         print(f"  {label:25s}: {count:4d} ({percentage:5.1f}%)")
 
     return train_data, val_data, test_data
+
+
+def calculate_class_weights(train_data):
+    """Calculate class weights for imbalanced dataset."""
+    train_labels = [item["manipulation_tactic"] for item in train_data]
+    unique_classes = sorted(list(set(train_labels)))
+    label_counts = Counter(train_labels)
+
+    total_samples = len(train_labels)
+    num_classes = len(unique_classes)
+
+    # Calculate weights using inverse frequency
+    weights_dict = {}
+    for class_name in unique_classes:
+        weight = total_samples / (num_classes * label_counts[class_name])
+        weights_dict[class_name] = weight
+
+    print("\n⚖️ Class weights for balancing:")
+    for class_name in unique_classes:
+        print(f"  {class_name:25s}: {weights_dict[class_name]:8.4f}")
+
+    return weights_dict, unique_classes
 
 
 # =============================================================================
@@ -493,7 +526,7 @@ def test_model_predictions(model, tokenizer, device, label_mapping):
 # =============================================================================
 
 
-def train_kaggle_model():
+def train_kaggle_model(use_class_weights=True):
     """Main function to train model on Kaggle."""
 
     # Configuration optimized for Kaggle GPU
@@ -520,7 +553,7 @@ def train_kaggle_model():
     try:
         # Load data from the psychological manipulation detection dataset
         train_data, val_data, test_data = load_enhanced_splits_data(
-            "/kaggle/input/psychological-manipulation-detection-dataset/enhanced_critical_splits.json"
+            "/kaggle/input/psychological-manipulation-detection-dataset/enhanced_critical_splits_augmented.json"
         )
 
         if train_data is None:
@@ -563,6 +596,16 @@ def train_kaggle_model():
             drop_last=False,  # Keep all validation samples
         )
 
+        # Calculate class weights if requested
+        class_weights_tensor = None
+        if use_class_weights:
+            weights_dict, unique_classes = calculate_class_weights(train_data)
+            class_weights_list = [
+                weights_dict[class_name]
+                for class_name in sorted(train_dataset.label_to_id.keys())
+            ]
+            class_weights_tensor = torch.tensor(class_weights_list, dtype=torch.float32)
+
         # Create model
         print("🧠 Creating model...")
         model = KaggleManipulationClassifier(
@@ -576,7 +619,14 @@ def train_kaggle_model():
         print(f"📊 Trainable parameters: {trainable_params:,}")
 
         # Create trainer and train
-        trainer = KaggleTrainer(model, train_loader, val_loader, device, config)
+        trainer = KaggleTrainer(
+            model,
+            train_loader,
+            val_loader,
+            device,
+            config,
+            class_weights=class_weights_tensor,
+        )
         history = trainer.train()
 
         # Plot results
@@ -621,7 +671,7 @@ if __name__ == "__main__":
     print("🚀 Starting Kaggle Enhanced Splits Training")
     print("Make sure you have:")
     print("1. ✅ GPU enabled in Kaggle notebook settings")
-    print("2. ✅ Enhanced_critical_splits.json uploaded as dataset")
+    print("2. ✅ enhanced_critical_splits_augmented.json uploaded as dataset")
     print("3. ✅ Updated the file path in load_enhanced_splits_data()")
     print("\nStarting in 3 seconds...")
 
@@ -629,7 +679,7 @@ if __name__ == "__main__":
 
     time.sleep(3)
 
-    success = train_kaggle_model()
+    success = train_kaggle_model(use_class_weights=True)
 
     if success:
         print("\n🎉 All done! Your model is ready for use.")
