@@ -12,7 +12,7 @@ import json
 import logging
 import torch
 import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, WeightedRandomSampler
 from transformers import AutoTokenizer, AutoModel, get_linear_schedule_with_warmup
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
@@ -595,10 +595,38 @@ def main():
     )
     val_dataset = ManipulationDataset(val_texts, val_labels, tokenizer, args.max_length)
 
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
+    # Calculate sample weights for WeightedRandomSampler
+    logger.info("Setting up WeightedRandomSampler for balanced batches...")
+
+    from collections import Counter
+
+    class_counts = Counter(train_labels)
+    total_samples = len(train_labels)
+
+    # Calculate class weights (inverse frequency)
+    class_weights_dict = {
+        cls: total_samples / count for cls, count in class_counts.items()
+    }
+
+    # Create sample weights for each training example
+    sample_weights = [class_weights_dict[label] for label in train_labels]
+    sample_weights_tensor = torch.tensor(sample_weights, dtype=torch.float64)
+
+    # Create WeightedRandomSampler
+    sampler = WeightedRandomSampler(
+        weights=sample_weights_tensor,
+        num_samples=len(sample_weights_tensor),
+        replacement=True,
+    )
+
+    logger.info("WeightedRandomSampler configured for balanced training batches")
+
+    train_loader = DataLoader(
+        train_dataset, batch_size=args.batch_size, sampler=sampler
+    )
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False)
 
-    # Calculate class weights if requested
+    # Calculate class weights for loss function if requested
     class_weights = None
     if args.use_class_weights:
         from collections import Counter

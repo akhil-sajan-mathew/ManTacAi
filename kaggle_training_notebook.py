@@ -16,9 +16,17 @@ import json
 import logging
 import torch
 import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, WeightedRandomSampler
 from transformers import AutoTokenizer, AutoModel, get_linear_schedule_with_warmup
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+from sklearn.metrics import (
+    accuracy_score, 
+    classification_report, 
+    confusion_matrix,
+    precision_recall_fscore_support,
+    balanced_accuracy_score,
+    matthews_corrcoef,
+    cohen_kappa_score
+)
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -353,15 +361,147 @@ class KaggleTrainer:
         return self.history
 
     def print_classification_report(self, true_labels, predictions):
-        """Print detailed classification report."""
+        """Print comprehensive classification metrics with confusion matrix."""
         label_names = list(self.train_loader.dataset.id_to_label.values())
-
-        print("\n📋 Classification Report:")
-        print("-" * 60)
-        report = classification_report(
-            true_labels, predictions, target_names=label_names, zero_division=0
+        
+        print("\n" + "="*80)
+        print("� COMPREHENSIVE CLASSIFICATION METRICS")
+        print("="*80)
+        
+        # Calculate all metrics
+        accuracy = accuracy_score(true_labels, predictions)
+        balanced_acc = balanced_accuracy_score(true_labels, predictions)
+        mcc = matthews_corrcoef(true_labels, predictions)
+        kappa = cohen_kappa_score(true_labels, predictions)
+        
+        # Per-class metrics
+        precision, recall, f1, support = precision_recall_fscore_support(
+            true_labels, predictions, labels=range(len(label_names)), zero_division=0
         )
-        print(report)
+        
+        # Macro and weighted averages
+        macro_precision = np.mean(precision)
+        macro_recall = np.mean(recall)
+        macro_f1 = np.mean(f1)
+        weighted_precision = np.average(precision, weights=support)
+        weighted_recall = np.average(recall, weights=support)
+        weighted_f1 = np.average(f1, weights=support)
+        
+        # Print overall metrics
+        print(f"\n{'OVERALL METRICS':<40s}")
+        print("-" * 80)
+        print(f"{'Accuracy:':<40s} {accuracy:>10.4f}")
+        print(f"{'Balanced Accuracy:':<40s} {balanced_acc:>10.4f}")
+        print(f"{'Matthews Correlation Coefficient:':<40s} {mcc:>10.4f}")
+        print(f"{'Cohen Kappa Score:':<40s} {kappa:>10.4f}")
+        print(f"\n{'Macro Precision:':<40s} {macro_precision:>10.4f}")
+        print(f"{'Macro Recall:':<40s} {macro_recall:>10.4f}")
+        print(f"{'Macro F1-Score:':<40s} {macro_f1:>10.4f}")
+        print(f"\n{'Weighted Precision:':<40s} {weighted_precision:>10.4f}")
+        print(f"{'Weighted Recall:':<40s} {weighted_recall:>10.4f}")
+        print(f"{'Weighted F1-Score:':<40s} {weighted_f1:>10.4f}")
+        
+        # Print per-class metrics
+        print(f"\n{'PER-CLASS METRICS':<40s}")
+        print("="*80)
+        print(f"{'Class':<30s} {'Precision':>10s} {'Recall':>10s} {'F1-Score':>10s} {'Support':>10s}")
+        print("-" * 80)
+        
+        for i, class_name in enumerate(label_names):
+            print(f"{class_name:<30s} "
+                  f"{precision[i]:>10.4f} "
+                  f"{recall[i]:>10.4f} "
+                  f"{f1[i]:>10.4f} "
+                  f"{support[i]:>10.0f}")
+        
+        print("-" * 80)
+        print(f"{'MACRO AVERAGE':<30s} "
+              f"{macro_precision:>10.4f} "
+              f"{macro_recall:>10.4f} "
+              f"{macro_f1:>10.4f} "
+              f"{sum(support):>10.0f}")
+        print(f"{'WEIGHTED AVERAGE':<30s} "
+              f"{weighted_precision:>10.4f} "
+              f"{weighted_recall:>10.4f} "
+              f"{weighted_f1:>10.4f} "
+              f"{sum(support):>10.0f}")
+        
+        # Print confusion matrix
+        self.print_confusion_matrix(true_labels, predictions, label_names)
+    
+    def print_confusion_matrix(self, true_labels, predictions, label_names):
+        """Print confusion matrix in text format."""
+        cm = confusion_matrix(true_labels, predictions)
+        cm_normalized = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+        
+        print("\n" + "="*120)
+        print("CONFUSION MATRIX (Counts)")
+        print("="*120)
+        
+        # Header
+        header_label = "True \\ Predicted"
+        print(f"\n{header_label:<25s}", end='')
+        for name in label_names:
+            print(f"{name[:10]:>11s}", end='')
+        print()
+        print("-" * 120)
+        
+        # Rows
+        for i, true_name in enumerate(label_names):
+            print(f"{true_name:<25s}", end='')
+            for j in range(len(label_names)):
+                print(f"{cm[i][j]:>11d}", end='')
+            print()
+        
+        print("\n" + "="*120)
+        print("CONFUSION MATRIX (Normalized by True Label - Recall per class)")
+        print("="*120)
+        
+        # Header
+        header_label = "True \\ Predicted"
+        print(f"\n{header_label:<25s}", end='')
+        for name in label_names:
+            print(f"{name[:10]:>11s}", end='')
+        print()
+        print("-" * 120)
+        
+        # Rows
+        for i, true_name in enumerate(label_names):
+            print(f"{true_name:<25s}", end='')
+            for j in range(len(label_names)):
+                print(f"{cm_normalized[i][j]:>11.3f}", end='')
+            print()
+        
+        # Plot confusion matrix heatmap
+        try:
+            fig, axes = plt.subplots(1, 2, figsize=(20, 8))
+            
+            # Raw counts
+            sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
+                        xticklabels=label_names, yticklabels=label_names,
+                        ax=axes[0], cbar_kws={'label': 'Count'})
+            axes[0].set_xlabel('Predicted Label')
+            axes[0].set_ylabel('True Label')
+            axes[0].set_title('Confusion Matrix (Counts)')
+            axes[0].tick_params(axis='x', rotation=45)
+            axes[0].tick_params(axis='y', rotation=0)
+            
+            # Normalized
+            sns.heatmap(cm_normalized, annot=True, fmt='.2f', cmap='Blues',
+                        xticklabels=label_names, yticklabels=label_names,
+                        ax=axes[1], cbar_kws={'label': 'Proportion'}, vmin=0, vmax=1)
+            axes[1].set_xlabel('Predicted Label')
+            axes[1].set_ylabel('True Label')
+            axes[1].set_title('Confusion Matrix (Normalized by True Label)')
+            axes[1].tick_params(axis='x', rotation=45)
+            axes[1].tick_params(axis='y', rotation=0)
+            
+            plt.tight_layout()
+            plt.savefig('confusion_matrix.png', dpi=300, bbox_inches='tight')
+            print("\n✓ Confusion matrix visualization saved to: confusion_matrix.png")
+            plt.show()
+        except Exception as e:
+            print(f"\n⚠️ Could not generate confusion matrix plot: {e}")
 
 
 # =============================================================================
@@ -521,6 +661,279 @@ def test_model_predictions(model, tokenizer, device, label_mapping):
         print("-" * 50)
 
 
+def evaluate_on_test_set(model, test_data, tokenizer, device, label_mapping, max_length=128):
+    """Comprehensive evaluation on test set with detailed metrics."""
+    print("\n" + "="*80)
+    print("📊 COMPREHENSIVE TEST SET EVALUATION")
+    print("="*80)
+    
+    # Create test dataset and loader
+    test_dataset = EnhancedSplitsDataset(test_data, tokenizer, max_length)
+    test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
+    
+    model.eval()
+    all_preds = []
+    all_labels = []
+    all_probs = []
+    
+    print(f"\n[Running inference on {len(test_data)} test samples...]")
+    
+    with torch.no_grad():
+        for batch in tqdm(test_loader, desc="Evaluating"):
+            input_ids = batch['input_ids'].to(device)
+            attention_mask = batch['attention_mask'].to(device)
+            labels = batch['labels'].to(device)
+            
+            outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+            logits = outputs['logits']
+            
+            probs = torch.softmax(logits, dim=1)
+            preds = torch.argmax(logits, dim=1)
+            
+            all_preds.extend(preds.cpu().numpy())
+            all_labels.extend(labels.cpu().numpy())
+            all_probs.extend(probs.cpu().numpy())
+    
+    y_pred = np.array(all_preds)
+    y_true = np.array(all_labels)
+    y_probs = np.array(all_probs)
+    
+    print("✓ Inference complete\n")
+    
+    # Get label names
+    id_to_label = {v: k for k, v in label_mapping.items()}
+    label_names = [id_to_label[i] for i in range(len(label_mapping))]
+    
+    # Calculate comprehensive metrics
+    accuracy = accuracy_score(y_true, y_pred)
+    balanced_acc = balanced_accuracy_score(y_true, y_pred)
+    mcc = matthews_corrcoef(y_true, y_pred)
+    kappa = cohen_kappa_score(y_true, y_pred)
+    
+    precision, recall, f1, support = precision_recall_fscore_support(
+        y_true, y_pred, labels=range(len(label_names)), zero_division=0
+    )
+    
+    macro_precision = np.mean(precision)
+    macro_recall = np.mean(recall)
+    macro_f1 = np.mean(f1)
+    weighted_precision = np.average(precision, weights=support)
+    weighted_recall = np.average(recall, weights=support)
+    weighted_f1 = np.average(f1, weights=support)
+    
+    # Confidence statistics
+    max_probs = np.max(y_probs, axis=1)
+    avg_confidence = np.mean(max_probs)
+    correct_mask = (y_pred == y_true)
+    avg_confidence_correct = np.mean(max_probs[correct_mask])
+    avg_confidence_incorrect = np.mean(max_probs[~correct_mask]) if np.any(~correct_mask) else 0
+    
+    # Print overall metrics
+    print("="*80)
+    print("OVERALL TEST SET METRICS")
+    print("="*80)
+    print(f"\n{'Metric':<40s} {'Value':>10s}")
+    print("-" * 52)
+    print(f"{'Accuracy:':<40s} {accuracy:>10.4f}")
+    print(f"{'Balanced Accuracy:':<40s} {balanced_acc:>10.4f}")
+    print(f"{'Matthews Correlation Coefficient:':<40s} {mcc:>10.4f}")
+    print(f"{'Cohen Kappa Score:':<40s} {kappa:>10.4f}")
+    print(f"\n{'Macro Precision:':<40s} {macro_precision:>10.4f}")
+    print(f"{'Macro Recall:':<40s} {macro_recall:>10.4f}")
+    print(f"{'Macro F1-Score:':<40s} {macro_f1:>10.4f}")
+    print(f"\n{'Weighted Precision:':<40s} {weighted_precision:>10.4f}")
+    print(f"{'Weighted Recall:':<40s} {weighted_recall:>10.4f}")
+    print(f"{'Weighted F1-Score:':<40s} {weighted_f1:>10.4f}")
+    print(f"\n{'Average Confidence:':<40s} {avg_confidence:>10.4f}")
+    print(f"{'Avg Confidence (Correct):':<40s} {avg_confidence_correct:>10.4f}")
+    print(f"{'Avg Confidence (Incorrect):':<40s} {avg_confidence_incorrect:>10.4f}")
+    
+    # Print per-class metrics
+    print("\n" + "="*80)
+    print("PER-CLASS TEST SET METRICS")
+    print("="*80)
+    print(f"\n{'Class':<30s} {'Precision':>10s} {'Recall':>10s} {'F1-Score':>10s} {'Support':>10s}")
+    print("-" * 80)
+    
+    for i, class_name in enumerate(label_names):
+        print(f"{class_name:<30s} "
+              f"{precision[i]:>10.4f} "
+              f"{recall[i]:>10.4f} "
+              f"{f1[i]:>10.4f} "
+              f"{support[i]:>10.0f}")
+    
+    print("-" * 80)
+    print(f"{'MACRO AVERAGE':<30s} "
+          f"{macro_precision:>10.4f} "
+          f"{macro_recall:>10.4f} "
+          f"{macro_f1:>10.4f} "
+          f"{sum(support):>10.0f}")
+    print(f"{'WEIGHTED AVERAGE':<30s} "
+          f"{weighted_precision:>10.4f} "
+          f"{weighted_recall:>10.4f} "
+          f"{weighted_f1:>10.4f} "
+          f"{sum(support):>10.0f}")
+    
+    # Print confusion matrix
+    cm = confusion_matrix(y_true, y_pred)
+    cm_normalized = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+    
+    print("\n" + "="*120)
+    print("TEST SET CONFUSION MATRIX (Counts)")
+    print("="*120)
+    
+    # Header
+    header_label = "True \\ Predicted"
+    print(f"\n{header_label:<25s}", end='')
+    for name in label_names:
+        print(f"{name[:10]:>11s}", end='')
+    print()
+    print("-" * 120)
+    
+    # Rows
+    for i, true_name in enumerate(label_names):
+        print(f"{true_name:<25s}", end='')
+        for j in range(len(label_names)):
+            print(f"{cm[i][j]:>11d}", end='')
+        print()
+    
+    print("\n" + "="*120)
+    print("TEST SET CONFUSION MATRIX (Normalized - Recall)")
+    print("="*120)
+    
+    # Header
+    header_label = "True \\ Predicted"
+    print(f"\n{header_label:<25s}", end='')
+    for name in label_names:
+        print(f"{name[:10]:>11s}", end='')
+    print()
+    print("-" * 120)
+    
+    # Rows
+    for i, true_name in enumerate(label_names):
+        print(f"{true_name:<25s}", end='')
+        for j in range(len(label_names)):
+            print(f"{cm_normalized[i][j]:>11.3f}", end='')
+        print()
+    
+    # Plot confusion matrix
+    try:
+        fig, axes = plt.subplots(1, 2, figsize=(20, 8))
+        
+        # Raw counts
+        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
+                    xticklabels=label_names, yticklabels=label_names,
+                    ax=axes[0], cbar_kws={'label': 'Count'})
+        axes[0].set_xlabel('Predicted Label')
+        axes[0].set_ylabel('True Label')
+        axes[0].set_title('Test Set Confusion Matrix (Counts)')
+        axes[0].tick_params(axis='x', rotation=45)
+        axes[0].tick_params(axis='y', rotation=0)
+        
+        # Normalized
+        sns.heatmap(cm_normalized, annot=True, fmt='.2f', cmap='Blues',
+                    xticklabels=label_names, yticklabels=label_names,
+                    ax=axes[1], cbar_kws={'label': 'Proportion'}, vmin=0, vmax=1)
+        axes[1].set_xlabel('Predicted Label')
+        axes[1].set_ylabel('True Label')
+        axes[1].set_title('Test Set Confusion Matrix (Normalized)')
+        axes[1].tick_params(axis='x', rotation=45)
+        axes[1].tick_params(axis='y', rotation=0)
+        
+        plt.tight_layout()
+        plt.savefig('test_confusion_matrix.png', dpi=300, bbox_inches='tight')
+        print("\n✓ Test confusion matrix saved to: test_confusion_matrix.png")
+        plt.show()
+    except Exception as e:
+        print(f"\n⚠️ Could not generate confusion matrix plot: {e}")
+    
+    # Analyze misclassifications
+    misclassified = []
+    for i, (true_label, pred_label) in enumerate(zip(y_true, y_pred)):
+        if true_label != pred_label:
+            misclassified.append({
+                'text': test_data[i]['text'],
+                'true_label': label_names[true_label],
+                'pred_label': label_names[pred_label],
+                'confidence': float(y_probs[i][pred_label]),
+                'true_prob': float(y_probs[i][true_label])
+            })
+    
+    misclass_pairs = Counter([
+        (label_names[t], label_names[p]) 
+        for t, p in zip(y_true, y_pred) 
+        if t != p
+    ])
+    
+    print("\n" + "="*80)
+    print(f"MISCLASSIFICATION ANALYSIS ({len(misclassified)} errors / {len(y_true)} total)")
+    print(f"Error Rate: {len(misclassified)/len(y_true)*100:.2f}%")
+    print("="*80)
+    
+    print("\nTop 10 Most Common Misclassification Patterns:")
+    print("-" * 80)
+    for (true_label, pred_label), count in misclass_pairs.most_common(10):
+        pct = count / len(y_true) * 100
+        print(f"  {true_label:<25s} → {pred_label:<25s}: {count:>4d} ({pct:>5.2f}%)")
+    
+    # Show examples
+    print("\nSample Misclassifications (Top 10 by confidence):")
+    print("-" * 80)
+    misclassified_sorted = sorted(misclassified, key=lambda x: x['confidence'], reverse=True)
+    
+    for i, error in enumerate(misclassified_sorted[:10], 1):
+        print(f"\n{i}. Text: \"{error['text'][:80]}{'...' if len(error['text']) > 80 else ''}\"")
+        print(f"   True: {error['true_label']:<25s} (prob: {error['true_prob']:.3f})")
+        print(f"   Pred: {error['pred_label']:<25s} (conf: {error['confidence']:.3f})")
+    
+    # Save detailed metrics
+    test_metrics = {
+        'overall_metrics': {
+            'accuracy': float(accuracy),
+            'balanced_accuracy': float(balanced_acc),
+            'macro_f1': float(macro_f1),
+            'weighted_f1': float(weighted_f1),
+            'mcc': float(mcc),
+            'kappa': float(kappa)
+        },
+        'per_class_metrics': {
+            label_names[i]: {
+                'precision': float(precision[i]),
+                'recall': float(recall[i]),
+                'f1_score': float(f1[i]),
+                'support': int(support[i])
+            }
+            for i in range(len(label_names))
+        },
+        'confusion_matrix': cm.tolist(),
+        'total_test_samples': len(y_true),
+        'total_errors': len(misclassified),
+        'error_rate': float(len(misclassified) / len(y_true))
+    }
+    
+    with open('test_set_metrics.json', 'w', encoding='utf-8') as f:
+        json.dump(test_metrics, f, indent=2, ensure_ascii=False)
+    
+    print("\n✓ Detailed test metrics saved to: test_set_metrics.json")
+    
+    print("\n" + "="*80)
+    print("KEY FINDINGS")
+    print("="*80)
+    print(f"  • Test Accuracy: {accuracy:.2%}")
+    print(f"  • Macro F1-Score: {macro_f1:.4f}")
+    print(f"  • Weighted F1-Score: {weighted_f1:.4f}")
+    print(f"  • Error Rate: {len(misclassified)/len(y_true)*100:.2f}%")
+    
+    # Identify problematic classes
+    worst_f1_idx = np.argmin(f1)
+    best_f1_idx = np.argmax(f1)
+    
+    print(f"\n  • Best Performing: {label_names[best_f1_idx]} (F1: {f1[best_f1_idx]:.4f})")
+    print(f"  • Worst Performing: {label_names[worst_f1_idx]} (F1: {f1[worst_f1_idx]:.4f})")
+    
+    return test_metrics
+
+
 # =============================================================================
 # MAIN TRAINING FUNCTION
 # =============================================================================
@@ -578,11 +991,43 @@ def train_kaggle_model(use_class_weights=True):
         print(f"📊 Number of classes: {config['num_classes']}")
         print(f"⚙️ Warmup steps: {config['warmup_steps']}")
 
+        # Calculate sample weights for WeightedRandomSampler
+        print("\n🎯 Setting up WeightedRandomSampler for balanced batches...")
+
+        # Count samples per class
+        class_counts = Counter([item["manipulation_tactic"] for item in train_data])
+        print(f"📊 Class distribution in training set:")
+        for cls, count in sorted(
+            class_counts.items(), key=lambda x: x[1], reverse=True
+        ):
+            print(f"   {cls:30s}: {count:4d} samples")
+
+        # Calculate class weights (inverse frequency)
+        total_samples = len(train_data)
+        class_weights_dict = {
+            cls: total_samples / count for cls, count in class_counts.items()
+        }
+
+        # Create sample weights for each training example
+        sample_weights = [
+            class_weights_dict[item["manipulation_tactic"]] for item in train_data
+        ]
+        sample_weights = torch.tensor(sample_weights, dtype=torch.float64)
+
+        # Create WeightedRandomSampler
+        sampler = WeightedRandomSampler(
+            weights=sample_weights, num_samples=len(sample_weights), replacement=True
+        )
+
+        print(f"✓ WeightedRandomSampler configured")
+        print(f"   This ensures each batch has balanced class representation")
+        print(f"   Minority classes will be oversampled during training")
+
         # Create data loaders
         train_loader = DataLoader(
             train_dataset,
             batch_size=config["batch_size"],
-            shuffle=True,
+            sampler=sampler,  # Use sampler instead of shuffle
             num_workers=2,
             pin_memory=True if torch.cuda.is_available() else False,
             drop_last=True,  # Drop last incomplete batch to avoid BatchNorm issues
@@ -632,8 +1077,20 @@ def train_kaggle_model(use_class_weights=True):
         # Plot results
         plot_training_curves(history)
 
-        # Test predictions
+        # Test predictions (demo samples)
         test_model_predictions(model, tokenizer, device, train_dataset.label_to_id)
+        
+        # Comprehensive test set evaluation
+        print("\n" + "="*80)
+        print("📊 Running comprehensive evaluation on test set...")
+        print("="*80)
+        test_metrics = evaluate_on_test_set(
+            model, 
+            test_data, 
+            tokenizer, 
+            device, 
+            train_dataset.label_to_id
+        )
 
         # Save final model with metadata
         final_model_data = {
@@ -641,6 +1098,7 @@ def train_kaggle_model(use_class_weights=True):
             "tokenizer_name": config["model_name"],
             "config": config,
             "history": history,
+            "test_metrics": test_metrics,  # Added comprehensive test metrics
             "label_mapping": train_dataset.label_to_id,
             "id_to_label": train_dataset.id_to_label,
             "best_val_acc": trainer.best_val_acc,
