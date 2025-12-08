@@ -45,7 +45,22 @@ class DatasetLoader:
                 data = json.load(f)
             
             # Convert to DataFrame
-            df = pd.DataFrame(data)
+            if isinstance(data, dict):
+                # Handle dictionary with split keys (train, validation, test)
+                rows = []
+                for split_name, examples in data.items():
+                    if isinstance(examples, list):
+                        for ex in examples:
+                            ex['split'] = split_name
+                            rows.append(ex)
+                df = pd.DataFrame(rows)
+            else:
+                # Handle flat list
+                df = pd.DataFrame(data)
+            
+            # Rename manipulation_tactic to label if needed
+            if 'manipulation_tactic' in df.columns and 'label' not in df.columns:
+                df = df.rename(columns={'manipulation_tactic': 'label'})
             
             # Validate required columns
             required_columns = ['text', 'label', 'split']

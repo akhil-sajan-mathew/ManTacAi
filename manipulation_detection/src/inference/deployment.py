@@ -10,6 +10,7 @@ from pathlib import Path
 import time
 from datetime import datetime
 import os
+import traceback
 
 from .predictor import ManipulationPredictor
 from ..models.manipulation_classifier import ManipulationClassifier
@@ -54,7 +55,9 @@ class DeploymentInference:
         # Initialize components
         self.preprocessor = TextPreprocessor()
         self.label_mapping = get_label_mapping()
-        self.id_to_label = {v: k for k, v in self.label_mapping.items()}
+        # label_mapping is ID -> Name (int -> str)
+        # label_to_id is Name -> ID (str -> int)
+        self.label_to_id = {v: k for k, v in self.label_mapping.items()}
         
         # Performance tracking
         self.inference_stats = {
@@ -109,28 +112,38 @@ class DeploymentInference:
             else:
                 raise ValueError("No configuration found in checkpoint or config file")
             
+            # Handle different config structures
+            if 'model' in config and isinstance(config['model'], dict):
+                model_name = config['model'].get('name', 'distilbert-base-uncased')
+                num_classes = config['model'].get('num_classes', 11)
+                dropout_rate = config['model'].get('dropout_rate', 0.1)
+            else:
+                model_name = config.get('model_name', 'distilbert-base-uncased')
+                num_classes = config.get('num_classes', 11)
+                dropout_rate = config.get('dropout_rate', 0.1)
+            
             # Create model
             model = ManipulationClassifier(
-                model_name=config['model']['name'],
-                num_classes=config['model']['num_classes'],
-                dropout_rate=config['model']['dropout_rate']
+                model_name=model_name,
+                num_classes=num_classes,
+                dropout_rate=dropout_rate
             )
             
             # Load weights
             model.load_state_dict(checkpoint['model_state_dict'])
             
+            # Load tokenizer
+            tokenizer = AutoTokenizer.from_pretrained(model_name)
+            
         else:
             # Load from saved model directory
             model = ManipulationClassifier.from_pretrained(str(self.model_path))
+            tokenizer = AutoTokenizer.from_pretrained(str(self.model_path))
             
             # Load config
             config_file = self.model_path / "config.json"
             with open(config_file, 'r') as f:
                 config = json.load(f)
-        
-        # Load tokenizer
-        model_name = config.get('model', {}).get('name', 'distilbert-base-uncased')
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
         
         # Move model to device
         model.to(self.device)
@@ -146,15 +159,19 @@ class DeploymentInference:
         
         # Enable inference mode optimizations
         if hasattr(torch, 'inference_mode'):
-            self.model = torch.jit.optimize_for_inference(self.model)
+            try:
+                self.model = torch.jit.optimize_for_inference(self.model)
+            except Exception as e:
+                logger.warning(f"JIT optimization failed: {e}")
         
         # Compile model if available (PyTorch 2.0+)
-        if hasattr(torch, 'compile'):
-            try:
-                self.model = torch.compile(self.model, mode='reduce-overhead')
-                logger.info("Model compiled for optimized inference")
-            except Exception as e:
-                logger.warning(f"Model compilation failed: {e}")
+        # if hasattr(torch, 'compile'):
+        #     try:
+        #         # On Windows, torch.compile might fail if no C++ compiler is found
+        #         self.model = torch.compile(self.model, mode='reduce-overhead')
+        #         logger.info("Model compiled for optimized inference")
+        #     except Exception as e:
+        #         logger.warning(f"Model compilation failed (continuing with eager mode): {e}")
         
         logger.info("Model optimized for inference")
     
@@ -208,7 +225,8 @@ class DeploymentInference:
             # Get results
             predicted_id = torch.argmax(probabilities, dim=-1).item()
             confidence = probabilities[0, predicted_id].item()
-            predicted_class = self.id_to_label[predicted_id]
+            # Use label_mapping for ID -> Name lookup
+            predicted_class = self.label_mapping[predicted_id]
             
             # Calculate inference time
             inference_time = (time.time() - start_time) * 1000  # Convert to milliseconds
@@ -229,7 +247,7 @@ class DeploymentInference:
             if return_probabilities:
                 all_probs = probabilities[0].cpu().numpy()
                 result['class_probabilities'] = {
-                    self.id_to_label[i]: float(prob) 
+                    self.label_mapping[i]: float(prob) 
                     for i, prob in enumerate(all_probs)
                 }
             
@@ -240,7 +258,7 @@ class DeploymentInference:
                 
                 for idx in top_k_indices:
                     class_id = idx.item()
-                    class_name = self.id_to_label[class_id]
+                    class_name = self.label_mapping[class_id]
                     prob = probabilities[0, class_id].item()
                     
                     top_k_predictions.append({
@@ -257,7 +275,8 @@ class DeploymentInference:
             return result
             
         except Exception as e:
-            logger.error(f"Prediction error: {str(e)}")
+            traceback.print_exc()
+            logger.error(f"Prediction error: {repr(e)}")
             return {
                 'predicted_class': 'error',
                 'confidence': 0.0,
@@ -346,7 +365,7 @@ class DeploymentInference:
                 if i in valid_indices:
                     predicted_id = torch.argmax(probabilities[valid_idx], dim=-1).item()
                     confidence = probabilities[valid_idx, predicted_id].item()
-                    predicted_class = self.id_to_label[predicted_id]
+                    predicted_class = self.label_mapping[predicted_id]
                     
                     result = {
                         'predicted_class': predicted_class,
@@ -359,7 +378,7 @@ class DeploymentInference:
                     if return_probabilities:
                         all_probs = probabilities[valid_idx].cpu().numpy()
                         result['class_probabilities'] = {
-                            self.id_to_label[j]: float(prob) 
+                            self.label_mapping[j]: float(prob) 
                             for j, prob in enumerate(all_probs)
                         }
                     

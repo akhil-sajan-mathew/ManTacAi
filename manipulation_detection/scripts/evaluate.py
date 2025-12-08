@@ -16,10 +16,11 @@ import logging
 from pathlib import Path
 import torch
 import pandas as pd
+import numpy as np
 from datetime import datetime
 
 # Add src to path
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from src.models.model_utils import ModelConfig, load_model_from_config
 from src.data.data_loaders import create_data_loaders_from_config
@@ -166,33 +167,33 @@ def perform_error_analysis(model, tokenizer, test_results, output_dir: str):
     # Systematic errors
     systematic_errors = error_analyzer.analyze_systematic_errors(y_true, y_pred, texts)
     
-    # Save analysis results
+    # Aggregate results
     analysis_results = {
-        'misclassification_analysis': misclass_analysis,
-        'class_performance_analysis': class_analysis,
+        'misclassification': misclass_analysis,
+        'class_performance': class_analysis,
         'difficult_examples': difficult_examples,
         'prediction_patterns': pattern_analysis,
-        'systematic_errors': systematic_errors,
-        'timestamp': datetime.now().isoformat()
+        'systematic_errors': systematic_errors
     }
     
-    # Convert numpy arrays to lists for JSON serialization
-    def convert_numpy(obj):
-        if hasattr(obj, 'tolist'):
-            return obj.tolist()
-        elif isinstance(obj, dict):
-            return {k: convert_numpy(v) for k, v in obj.items()}
-        elif isinstance(obj, list):
-            return [convert_numpy(item) for item in obj]
-        else:
-            return obj
-    
-    analysis_results = convert_numpy(analysis_results)
-    
+    # Save analysis results
     analysis_path = os.path.join(output_dir, 'analysis', 'error_analysis.json')
     with open(analysis_path, 'w') as f:
-        json.dump(analysis_results, f, indent=2)
-    
+        # Convert numpy types to python types for serialization
+        def convert_numpy(obj):
+            if isinstance(obj, (np.int_, np.intc, np.intp, np.int8,
+                np.int16, np.int32, np.int64, np.uint8,
+                np.uint16, np.uint32, np.uint64)):
+                return int(obj)
+            elif isinstance(obj, (np.float_, np.float16, np.float32, 
+                np.float64)):
+                return float(obj)
+            elif isinstance(obj, (np.ndarray,)):
+                return obj.tolist()
+            return obj
+            
+        json.dump(analysis_results, f, indent=4, default=convert_numpy)
+        
     logger.info(f"Error analysis saved to: {analysis_path}")
     
     return analysis_results
@@ -296,7 +297,7 @@ def generate_reports(results_dict, model_info, output_dir: str, analysis_results
         summary_report.append("\nERROR ANALYSIS HIGHLIGHTS")
         summary_report.append("-" * 25)
         
-        misclass = analysis_results['misclassification_analysis']
+        misclass = analysis_results['misclassification']
         summary_report.append(f"Total Misclassifications: {misclass['total_misclassified']}")
         summary_report.append(f"Misclassification Rate: {misclass['misclassification_rate']:.4f}")
         
@@ -507,19 +508,6 @@ def main():
                 'datasets_evaluated': datasets_to_eval
             }
         }
-        
-        # Convert numpy arrays for JSON serialization
-        def convert_for_json(obj):
-            if hasattr(obj, 'tolist'):
-                return obj.tolist()
-            elif isinstance(obj, dict):
-                return {k: convert_for_json(v) for k, v in obj.items()}
-            elif isinstance(obj, list):
-                return [convert_for_json(item) for item in obj]
-            else:
-                return obj
-        
-        complete_results = convert_for_json(complete_results)
         
         results_path = os.path.join(args.output_dir, 'complete_evaluation_results.json')
         with open(results_path, 'w') as f:

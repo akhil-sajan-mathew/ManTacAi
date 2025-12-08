@@ -20,7 +20,7 @@ from datetime import datetime
 import yaml
 
 # Add src to path
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from src.models.model_utils import ModelConfig
 from src.data.data_loaders import create_data_loaders_from_config

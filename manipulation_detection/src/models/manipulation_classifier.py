@@ -45,6 +45,7 @@ class ManipulationClassifier(nn.Module):
         self.hidden_size = self.config.hidden_size
         
         # Classification head
+        self.layer_norm = nn.LayerNorm(self.hidden_size)
         self.dropout = nn.Dropout(dropout_rate)
         self.classifier = nn.Linear(self.hidden_size, num_classes)
         
@@ -87,6 +88,7 @@ class ManipulationClassifier(nn.Module):
         pooled_output = transformer_outputs.last_hidden_state[:, 0, :]
         
         # Apply dropout and classification layer
+        pooled_output = self.layer_norm(pooled_output)
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
         

@@ -87,7 +87,8 @@ class ModelAnalyzer:
                 ]
             
             analysis['misclassified_examples'].append(example)
-            analysis['confusion_pairs'][(true_class, pred_class)] += 1
+            # Use string key for JSON compatibility
+            analysis['confusion_pairs'][f"{true_class} -> {pred_class}"] += 1
         
         # Find most confused class pairs
         sorted_pairs = sorted(analysis['confusion_pairs'].items(), 
