@@ -28,7 +28,9 @@ def calculate_risk_score(predictions):
         "deflection": 0.5,
         "whataboutism": 0.4,
         "appeal_to_emotion": 0.4,
-        "ethical_persuasion": 0.0
+        "ethical_persuasion": 0.0,
+        "neutral_conversation": 0.0,
+        "coercive_control": 0.9
     }
 
     max_prob = 0.0
@@ -69,24 +71,48 @@ def calculate_darvo_score(predictions):
     if not predictions:
         return 0.0
 
-    # Map tactics to DARVO components
-    deny_score = predictions.get("deflection", 0.0) + predictions.get("stonewalling", 0.0)
-    attack_score = predictions.get("belittling_ridicule", 0.0) + predictions.get("threatening_intimidation", 0.0) + predictions.get("passive_aggression", 0.0)
-    reverse_victim_score = predictions.get("guilt_tripping", 0.0) + predictions.get("appeal_to_emotion", 0.0) + predictions.get("whataboutism", 0.0)
+    # 1. Deny (Gaslighting is key here)
+    deny_score = (
+        predictions.get("gaslighting", 0.0) + 
+        predictions.get("deflection", 0.0) + 
+        predictions.get("stonewalling", 0.0)
+    )
+
+    # 2. Attack
+    attack_score = (
+        predictions.get("belittling_ridicule", 0.0) + 
+        predictions.get("threatening_intimidation", 0.0) + 
+        predictions.get("passive_aggression", 0.0)
+    )
+
+    # 3. Reverse Victim & Offender
+    reverse_score = (
+        predictions.get("guilt_tripping", 0.0) + 
+        predictions.get("appeal_to_emotion", 0.0) + 
+        predictions.get("whataboutism", 0.0)
+    )
     
-    # Average the components, but weight them if present
-    # This is a heuristic: if we see elements of all three, score is high
-    
-    # Normalize
+    # Cap components at 1.0
     deny_score = min(deny_score, 1.0)
     attack_score = min(attack_score, 1.0)
-    reverse_victim_score = min(reverse_victim_score, 1.0)
+    reverse_score = min(reverse_score, 1.0)
     
-    # Composite score
-    darvo_score = (deny_score * 0.3) + (attack_score * 0.4) + (reverse_victim_score * 0.3)
+    # Check for Synergy (The core of DARVO)
+    # Count how many components are arguably present (> 0.15 threshold)
+    components_present = 0
+    if deny_score > 0.15: components_present += 1
+    if attack_score > 0.15: components_present += 1
+    if reverse_score > 0.15: components_present += 1
     
-    # Boost if all three are present (synergy)
-    if deny_score > 0.2 and attack_score > 0.2 and reverse_victim_score > 0.2:
-        darvo_score *= 1.2
+    # Base calculation (Average)
+    raw_score = (deny_score + attack_score + reverse_score) / 3.0
+    
+    # Synergy Multipliers
+    if components_present == 3:
+        final_score = raw_score * 1.5 # Full DARVO = 50% boost
+    elif components_present == 2:
+        final_score = raw_score * 1.2 # Partial DARVO = 20% boost
+    else:
+        final_score = raw_score # Isolated tactic != DARVO
         
-    return min(darvo_score, 1.0)
+    return min(final_score, 1.0)

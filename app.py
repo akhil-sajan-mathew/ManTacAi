@@ -1,6 +1,7 @@
 import gradio as gr
 import os
 import sys
+import re
 
 # Suppress tokenizer warning
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -10,7 +11,9 @@ sys.path.append(os.path.abspath(os.path.join("manipulation_detection", "src")))
 
 from inference.model import ManipulationModel
 from inference.scoring import calculate_risk_score, calculate_darvo_score
-from utils.safety import evaluate_safety_risk, SAFETY_CHECKLIST_ITEMS
+from utils.safety import evaluate_safety_risk, SAFETY_CHECKLIST_ITEMS, get_dynamic_safety_plan
+from utils.report import generate_full_report
+from utils.export import generate_word_report
 
 # Initialize Model (Lazy loading or global)
 # We'll initialize it globally for this demo, but ideally it should be cached
@@ -26,9 +29,27 @@ def analyze_messages(msg1, msg2, msg3, safety_checklist):
     """
     Main analysis function called by the UI.
     """
-    messages = [m for m in [msg1, msg2, msg3] if m.strip()]
+    raw_messages = [m.strip() for m in [msg1, msg2, msg3] if m and m.strip()]
     
+    # Validation: Filter out garbage (too short or no letters)
+    messages = []
+    for m in raw_messages:
+        # Check: length >= 4 AND contains at least one letter
+        if len(m) >= 4 and re.search(r'[a-zA-Z]', m):
+            messages.append(m)
+
     if not messages:
+        # If input was provided but filtered out (garbage)
+        if raw_messages:
+            warning_msg = "⚠️ **Input Ignored**\n\nThe text provided is too short or doesn't look like a real message. Please enter meaningful sentences (minimum 4 characters) for analysis."
+            return (
+                gr.update(visible=False), 
+                gr.update(value=warning_msg, visible=True), # Use Concerns box for warning
+                gr.update(visible=False), 
+                gr.update(visible=False), 
+                gr.update(visible=False)
+            )
+        # No input at all
         return (
             gr.update(visible=False), # Risk Card
             gr.update(visible=False), # Key Concerns
@@ -97,9 +118,9 @@ def analyze_messages(msg1, msg2, msg3, safety_checklist):
     # 3. Additional Analysis (DARVO)
     darvo_level = "High" if darvo_score > 0.7 else "Moderate" if darvo_score > 0.4 else "Low"
     darvo_html = f"""
-    <div style="background-color: #fef08a; color: #854d0e; padding: 15px; border-radius: 8px;">
-        <strong>📊 DARVO Score: {darvo_score:.2f} ({darvo_level})</strong><br>
-        <span style="font-size: 0.9em;">DARVO (Deny, Attack, Reverse Victim & Offender) indicates potential narrative manipulation.</span>
+    <div style="background-color: #1f2937; color: white; padding: 15px; border-radius: 8px; border: 1px solid #374151;">
+        <strong style="color: #fcd34d;">📊 DARVO Score: {darvo_score:.2f} ({darvo_level})</strong><br>
+        <span style="font-size: 0.9em; opacity: 0.9;">DARVO (Deny, Attack, Reverse Victim & Offender) indicates potential narrative manipulation.</span>
     </div>
     """
 
@@ -126,8 +147,48 @@ def analyze_messages(msg1, msg2, msg3, safety_checklist):
         gr.update(value=concerns_text, visible=True),
         gr.update(value=darvo_html, visible=True),
         gr.update(value=recommendations, visible=True),
-        gr.update(visible=True) # Timeline placeholder
+        gr.update(visible=True), # Timeline placeholder
+        {
+            "risk_level": risk_level, 
+            "pattern": detected_pattern, 
+            "darvo_score": darvo_score,
+            "messages": messages,
+            "predictions": aggregated_predictions if model else {},
+            "safety_checklist": safety_checklist
+        } 
     )
+
+def generate_safety_plan(analysis_state):
+    if not analysis_state:
+        return gr.update(visible=False, value="")
+    
+    plan = get_dynamic_safety_plan(
+        analysis_state.get("risk_level", "Low"),
+        analysis_state.get("pattern", "Unknown"),
+        analysis_state.get("darvo_score", 0.0)
+    )
+    return gr.update(value=plan, visible=True)
+
+def show_full_analysis(analysis_state):
+    if not analysis_state:
+        return gr.update(visible=False, value="")
+        
+    report = generate_full_report(
+        analysis_state.get("messages", []),
+        analysis_state.get("predictions", {}),
+        analysis_state.get("risk_level", "Unknown"),
+        analysis_state.get("pattern", "Unknown"),
+        analysis_state.get("darvo_score", 0.0),
+        analysis_state.get("safety_checklist", [])
+    )
+    return gr.update(value=report, visible=True)
+
+def download_report(analysis_state):
+    if not analysis_state:
+        return None
+    
+    file_path = generate_word_report(analysis_state)
+    return gr.update(value=file_path, visible=True)
 
 
 # Custom CSS for Dark Theme
@@ -149,6 +210,9 @@ with gr.Blocks() as demo:
         <p style="font-size: 1.1em; opacity: 0.8;">Share messages that concern you, and we'll help you understand what patterns might be present.</p>
     </div>
     """)
+
+    # State for storing analysis results
+    analysis_state = gr.State({})
 
     with gr.Row():
         # Left Column: Inputs
@@ -192,20 +256,47 @@ with gr.Blocks() as demo:
         with gr.Column():
             gr.Markdown("#### Personalized Recommendations", visible=False)
             recommendations_output = gr.Markdown(visible=False)
-            
             with gr.Row():
-                gr.Button("🛡️ Get Safety Plan")
-                gr.Button("📄 Show Full Analysis")
-                gr.Button("⬇️ Download Report")
+                safety_btn = gr.Button("🛡️ Get Safety Plan")
+                full_analysis_btn = gr.Button("📄 Show Full Analysis")
+                download_btn = gr.Button("⬇️ Download Report")
+            
+            # Dynamic Safety Plan Output
+            safety_plan_output = gr.Markdown(visible=False)
+            
+            # Full Analysis Output
+            full_analysis_output = gr.Markdown(visible=False)
+            
+            # Download File Output (Hidden until generated)
+            download_output = gr.File(label="Download Report", visible=False, file_types=[".docx"])
 
     # Timeline Graph (Placeholder)
     timeline_output = gr.Plot(visible=False, label="Pattern Timeline")
 
     # Wiring
+    # Wiring
     analyze_btn.click(
         analyze_messages,
         inputs=[msg1, msg2, msg3, safety_checklist],
-        outputs=[risk_output, concerns_output, darvo_output, recommendations_output, timeline_output]
+        outputs=[risk_output, concerns_output, darvo_output, recommendations_output, timeline_output, analysis_state]
+    )
+
+    safety_btn.click(
+        generate_safety_plan,
+        inputs=[analysis_state],
+        outputs=[safety_plan_output]
+    )
+
+    full_analysis_btn.click(
+        show_full_analysis,
+        inputs=[analysis_state],
+        outputs=[full_analysis_output]
+    )
+
+    download_btn.click(
+        download_report,
+        inputs=[analysis_state],
+        outputs=[download_output]
     )
 
 if __name__ == "__main__":

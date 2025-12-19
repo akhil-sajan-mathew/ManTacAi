@@ -22,18 +22,22 @@
     "7": "threatening_intimidation",
     "8": "passive_aggression",
     "9": "appeal_to_emotion",
-    "10": "whataboutism"
+    "10": "whataboutism",
+    "11": "neutral_conversation",
+    "12": "coercive_control"
   },
   "initializer_range": 0.02,
   "intermediate_size": 3072,
   "label2id": {
     "appeal_to_emotion": 9,
     "belittling_ridicule": 5,
+    "coercive_control": 12,
     "deflection": 3,
     "ethical_persuasion": 0,
     "gaslighting": 1,
     "guilt_tripping": 2,
     "love_bombing": 6,
+    "neutral_conversation": 11,
     "passive_aggression": 8,
     "stonewalling": 4,
     "threatening_intimidation": 7,
