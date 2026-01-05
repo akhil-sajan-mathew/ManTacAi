@@ -13,7 +13,14 @@ from inference.model import ManipulationModel
 from inference.scoring import calculate_risk_score, calculate_darvo_score
 from utils.safety import evaluate_safety_risk, SAFETY_CHECKLIST_ITEMS, get_dynamic_safety_plan
 from utils.report import generate_full_report
+
 from utils.export import generate_word_report
+from utils.context_engine import ContextEngine
+from datetime import datetime, date
+import time
+
+# Initialize Context Engine (Persistent State)
+context_engine = ContextEngine()
 
 # Initialize Model (Lazy loading or global)
 # We'll initialize it globally for this demo, but ideally it should be cached
@@ -25,29 +32,93 @@ except Exception as e:
     print(f"Warning: Could not load model: {e}")
     model = None
 
-def analyze_messages(msg1, msg2, msg3, safety_checklist):
+def parse_timestamp(line):
+    # Try to find [HH:MM] or HH:MM AM/PM
+    # Returns float timestamp (epoch) or None
+    match = re.search(r'\[?(\d{1,2}:\d{2}(?:\s?[APap][Mm])?)\]?', line)
+    if match:
+        time_str = match.group(1)
+        try:
+            dt = datetime.strptime(time_str, "%H:%M")
+        except ValueError:
+            try:
+                dt = datetime.strptime(time_str, "%I:%M %p")
+            except ValueError:
+                return None
+        
+        # Combine with today's date
+        full_dt = datetime.combine(date.today(), dt.time())
+        return full_dt.timestamp()
+    return None
+
+def is_benign(text):
+    # 1. Filter short garbage (< 3 words)
+    if len(text.split()) < 3:
+        return True
+    
+    # 2. Whitelist of safe greetings
+    safe_terms = {"hello", "hi", "hey", "ok", "okay", "thanks", "thank you", "yes", "no"}
+    cleaned = re.sub(r'[^\w\s]', '', text.lower()).strip()
+    if cleaned in safe_terms:
+        return True
+        
+    return False
+
+def get_risk_verdict(score):
+    if score < 0.35: return "Low Risk / Safe"
+    if score < 0.65: return "Moderate Risk"
+    if score < 0.85: return "High Risk"
+    return "Critical Risk"
+
+def analyze_messages(msg1, msg2, msg3, safety_checklist, suspect_name=""):
     """
     Main analysis function called by the UI.
+    Supports Sender Parsing AND Timestamp Parsing.
     """
-    raw_messages = [m.strip() for m in [msg1, msg2, msg3] if m and m.strip()]
+    # Combine inputs and split by lines
+    all_text = "\n".join([m for m in [msg1, msg2, msg3] if m])
+    lines = all_text.split('\n')
     
-    # Validation: Filter out garbage (too short or no letters)
-    messages = []
-    for m in raw_messages:
-        # Check: length >= 4 AND contains at least one letter
-        if len(m) >= 4 and re.search(r'[a-zA-Z]', m):
-            messages.append(m)
+    # Pre-processing: Extract valid messages with metadata
+    valid_events = [] # List of (text, timestamp)
+    current_timestamp = time.time() # Default
+    
+    for line in lines:
+        line = line.strip()
+        if not line: continue
+        
+        # 1. Parse Timestamp
+        ts = parse_timestamp(line)
+        if ts:
+            current_timestamp = ts
+            # Strip timestamp for cleaner text analysis
+            line = re.sub(r'\[?(\d{1,2}:\d{2}(?:\s?[APap][Mm])?)\]?[:\-]?\s*', '', line).strip()
+
+        # 2. Sender Parsing
+        if suspect_name:
+            pattern = re.compile(f"^[\\[\\(]?{re.escape(suspect_name)}[\\]\\)]?[:\\-]?\\s*", re.IGNORECASE)
+            if pattern.match(line):
+                content = pattern.sub("", line).strip()
+                if len(content) >= 4 and re.search(r'[a-zA-Z]', content):
+                    valid_events.append((content, current_timestamp))
+        else:
+            if len(line) >= 4 and re.search(r'[a-zA-Z]', line):
+                valid_events.append((line, current_timestamp))
+                
+    messages = [m for m, t in valid_events] # For compatibility with return
+
 
     if not messages:
         # If input was provided but filtered out (garbage)
-        if raw_messages:
+        if all_text.strip():
             warning_msg = "⚠️ **Input Ignored**\n\nThe text provided is too short or doesn't look like a real message. Please enter meaningful sentences (minimum 4 characters) for analysis."
             return (
                 gr.update(visible=False), 
                 gr.update(value=warning_msg, visible=True), # Use Concerns box for warning
                 gr.update(visible=False), 
                 gr.update(visible=False), 
-                gr.update(visible=False)
+                gr.update(visible=False),
+                {}
             )
         # No input at all
         return (
@@ -55,32 +126,123 @@ def analyze_messages(msg1, msg2, msg3, safety_checklist):
             gr.update(visible=False), # Key Concerns
             gr.update(visible=False), # Additional Analysis
             gr.update(visible=False), # Recommendations
-            gr.update(visible=False)  # Timeline
+            gr.update(visible=False),  # Timeline
+            {}
         )
 
     # 1. Safety Check (Override)
     safety_risk_level, risk_modifier, safety_recs = evaluate_safety_risk(safety_checklist)
     is_high_risk = safety_risk_level in ["High", "Critical"]
     
-    # 2. Model Inference
+    # 2. Sequential Analysis Loop
+    final_risk_level = "Low Risk / Safe" # Default
+    final_risk_score = 0.0
+    final_pattern = "None"
+    final_cycle_state = "Neutral" # Default for benign/safe
+    final_darvo = 0.0
+    
+    aggregated_predictions_all = {} # For reporting
+
     if model:
-        # Predict for each message
-        batch_results = model.predict_batch(messages)
-        
-        # Aggregate results (e.g., take max probability across messages for each label)
-        aggregated_predictions = {}
-        for res in batch_results:
-            for label, prob in res.items():
-                aggregated_predictions[label] = max(aggregated_predictions.get(label, 0.0), prob)
+        # We process sequentially to update the State Machine per message
+        for msg_text, timestamp in valid_events:
+            # BENIGN FILTER
+            if is_benign(msg_text):
+                continue # Skip model analysis for safe inputs
+
+            # Predict
+            preds = model.predict(msg_text)
+            
+            # --- CONTEXT PATCH: Detect Work/Gaming Venting ---
+            # Prevents "I hate this game" or "My boss is an idiot" from being flagged as Ridicule/Threats
+            temp_max_label = max(preds, key=preds.get)
+            toxic_labels = ["belittling_ridicule", "threatening_intimidation", "passive_aggression"]
+            
+            if temp_max_label in toxic_labels:
+                work_triggers = ["boss", "job", "work", "manager", "coworker", "client", "customer"]
+                # Note: 'trash' excluded for safety.
+                tech_triggers = ["game", "level", "dev", "developer", "lag", "glitch", "server", "computer", "wifi", "internet", "phone", "app"] 
+                all_context_triggers = work_triggers + tech_triggers
                 
-        # Calculate Scores
-        risk_score, risk_level, detected_pattern = calculate_risk_score(aggregated_predictions)
-        darvo_score = calculate_darvo_score(aggregated_predictions)
-        
+                text_lower = msg_text.lower()
+                
+                # Check if anger is context-based (Safe)
+                if any(t in text_lower for t in all_context_triggers):
+                    # SAFETY CHECK: Ensure it's not blaming the partner ("Because of you")
+                    if "because of you" not in text_lower:
+                        # Override to Benign Venting (Safe)
+                        # We reconstruct preds to ensure global aggregation sees this as SAFE.
+                        preds = {k: 0.0 for k in preds} 
+                        preds["benign_venting"] = 0.95 # High confidence safe
+            # -------------------------------------------------
+
+            # Aggregate for global report
+            for label, prob in preds.items():
+                aggregated_predictions_all[label] = max(aggregated_predictions_all.get(label, 0.0), prob)
+            
+            # Find primary label for this event
+            max_label = max(preds, key=preds.get)
+            max_score = preds[max_label]
+            
+            # Feed Context Engine
+            context_result = context_engine.add_event(
+                msg_text,
+                max_label, 
+                max_score,
+                timestamp=timestamp
+            )
+            
+            # Update running state
+            final_cycle_state = context_result["current_state"]
+            
+        # Recalculate Global Metrics based on Aggregation + Final Context
+        if aggregated_predictions_all:
+             final_risk_score, _, final_pattern = calculate_risk_score(aggregated_predictions_all)
+             final_darvo = calculate_darvo_score(aggregated_predictions_all)
+             
+             # Verbalize Verdict
+             final_risk_level = get_risk_verdict(final_risk_score)
+
+             # --- V8 EMERGENCY OVERRIDE ---
+             # If the primary detected pattern is an Emergency (e.g. "Call 911"), 
+             # force the UI to alert mode, even if "Manipulation Risk" is 0.0.
+             if final_pattern == "urgent_emergency":
+                 final_risk_level = "⚠️ EMERGENCY DETECTED"
+                 final_risk_score = 1.0 # Force red color logic
+                 # Note: We keep the pattern as "urgent_emergency"
+
+             # Contextual Overrides (Only if significant risk detected AND not emergency)
+             elif final_risk_score >= 0.55:
+                if final_cycle_state == "EXPLOSION":
+                    final_risk_level = "Critical Risk"
+                    final_risk_score = max(final_risk_score, 0.95)
+                    final_pattern = f"{final_pattern} (Explosion Phase)"
+                elif final_cycle_state == "HONEYMOON":
+                    final_risk_level = "High Risk" 
+                    final_pattern = "Manipulation Cycle: Honeymoon Phase"
+                elif final_cycle_state == "TENSION":
+                    if "Low" in final_risk_level:
+                        final_risk_level = "Moderate Risk"
+                        final_pattern = "Tension Building"
+             else:
+                 # Force Neutral phase logic if score is low
+                 final_cycle_state = "Neutral"
+        else:
+             # All inputs were benign
+             final_risk_level = "Low Risk / Safe"
+             final_risk_score = 0.0
+             final_cycle_state = "Neutral"
+                
     else:
-        # Fallback if model fails
-        risk_score, risk_level, detected_pattern = 0.0, "Unknown", "Model Error"
-        darvo_score = 0.0
+        final_risk_score, final_risk_level, final_pattern = 0.0, "Unknown", "Model Error"
+        final_darvo = 0.0
+        
+    # Map final variables to legacy names for UI construction
+    risk_level = final_risk_level
+    risk_score = final_risk_score
+    detected_pattern = final_pattern
+    darvo_score = final_darvo
+    cycle_state = final_cycle_state
 
     # Safety Override / Modifier
     if is_high_risk:
@@ -94,13 +256,15 @@ def analyze_messages(msg1, msg2, msg3, safety_checklist):
     # Construct Output
     
     # 1. Risk Card
-    risk_color = "#ef4444" if risk_level in ["High", "Critical"] else "#eab308" if risk_level == "Medium" else "#22c55e"
+    # 1. Risk Card
+    risk_color = "#ef4444" if "High" in risk_level or "Critical" in risk_level else "#eab308" if "Moderate" in risk_level else "#22c55e"
     risk_html = f"""
     <div style="background-color: {risk_color}20; border: 2px solid {risk_color}; border-radius: 10px; padding: 20px; text-align: center;">
-        <h2 style="color: {risk_color}; margin: 0;">{risk_level} Risk</h2>
+        <h2 style="color: {risk_color}; margin: 0;">{risk_level}</h2>
         <p style="color: white; margin-top: 5px;">Based on the messages you shared</p>
         <div style="background-color: {risk_color}40; padding: 10px; border-radius: 5px; margin-top: 15px;">
-            <h3 style="color: white; margin: 0;">{detected_pattern} pattern detected</h3>
+            <h3 style="color: white; margin: 0;">{detected_pattern}</h3>
+            <p style="color: white; margin-top: 5px; font-weight: bold;">Cycle Phase: {cycle_state}</p>
             <p style="color: white; margin: 0;">Risk Score: {int(risk_score * 100)}%</p>
         </div>
     </div>
@@ -153,7 +317,7 @@ def analyze_messages(msg1, msg2, msg3, safety_checklist):
             "pattern": detected_pattern, 
             "darvo_score": darvo_score,
             "messages": messages,
-            "predictions": aggregated_predictions if model else {},
+            "predictions": aggregated_predictions_all if model else {},
             "safety_checklist": safety_checklist
         } 
     )
@@ -223,6 +387,9 @@ with gr.Blocks() as demo:
             msg1 = gr.Textbox(label="Message 1 *", placeholder="e.g., \"You never take responsibility for your actions.\"", lines=3, elem_classes="input-box")
             msg2 = gr.Textbox(label="Message 2 (optional)", placeholder="Enter the message here...", lines=3, elem_classes="input-box")
             msg3 = gr.Textbox(label="Message 3 (optional)", placeholder="Enter the message here...", lines=3, elem_classes="input-box")
+            
+            suspect_name = gr.Textbox(label="Suspect Name (Optional)", placeholder="Enter name to filter chat logs (e.g. 'John')", lines=1, elem_classes="input-box")
+
 
         # Right Column: Safety Checklist
         with gr.Column(scale=1):
@@ -274,10 +441,9 @@ with gr.Blocks() as demo:
     timeline_output = gr.Plot(visible=False, label="Pattern Timeline")
 
     # Wiring
-    # Wiring
     analyze_btn.click(
         analyze_messages,
-        inputs=[msg1, msg2, msg3, safety_checklist],
+        inputs=[msg1, msg2, msg3, safety_checklist, suspect_name],
         outputs=[risk_output, concerns_output, darvo_output, recommendations_output, timeline_output, analysis_state]
     )
 

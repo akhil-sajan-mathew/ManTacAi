@@ -30,7 +30,13 @@ def calculate_risk_score(predictions):
         "appeal_to_emotion": 0.4,
         "ethical_persuasion": 0.0,
         "neutral_conversation": 0.0,
-        "coercive_control": 0.9
+        "coercive_control": 0.9,
+        # V6 Normalcy Classes (Zero Risk)
+        "benign_venting": 0.0,
+        "healthy_conflict": 0.0,
+        "benign_affection": 0.0,
+        "neutral_logistics": 0.0,
+        "urgent_emergency": 0.0
     }
 
     max_prob = 0.0
