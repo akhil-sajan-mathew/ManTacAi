@@ -2,107 +2,128 @@
 
 **ManTacAi** is an AI-powered forensic tool designed to detect subtle signs of domestic violence, coercive control, and psychological manipulation in text conversations. 
 
-Unlike standard sentiment analyzers, ManTacAi is trained to identify the **"Wolf in Sheep's Clothing"**—manipulation disguised as care, love, or rational concern.
+Unlike standard sentiment analyzers, ManTacAi is trained to identify the **"Wolf in Sheep's Clothing"**—manipulation disguised as care, love, or rational concern. It uses a **Hybrid Architecture** combining a fine-tuned Transformer model (V8) with a rule-based Context Engine to track the Cycle of Abuse.
 
 ![Status](https://img.shields.io/badge/Status-Production%20Ready-green)
 ![Model](https://img.shields.io/badge/Model-V8%20Platinum-blue)
-![Safety](https://img.shields.io/badge/Safety-First-red)
+![Classes](https://img.shields.io/badge/Classes-18%20Types-orange)
 
 ---
 
-## 🚀 Key Features
+## 🔍 The 18-Point Taxonomy (Class Labels)
+ManTacAi classifies every message into one of **18 distinct categories**, ranging from critical safety threats to healthy communication.
 
-### 1. The V8 "Platinum" Model (18 Classes)
-Most models only see "Negative Sentiment." ManTacAi detects **18 specific tactic classes**, including:
-*   **Coercive Control:** *"I deleted your apps to protect you."*
-*   **Love Bombing:** *"We are twin flames, nobody else matters."*
-*   **Gaslighting:** *"You are imagining things, I never said that."*
-*   **DARVO:** (Deny, Attack, Reverse Victim & Offender).
-*   **Urgent Emergency:** *"Call 911"*, *"Help"* (Instantly flagged).
-*   **Ethical Persuasion:** Distinguishes healthy negotiation from manipulation.
-
-### 2. Contextual "Cycle of Abuse" Engine
-The AI doesn't just look at single messages. It tracks the **Cycle of Abuse**:
-1.  **Tension Building:** Passive aggression, stonewalling.
-2.  **Explosion:** Threats, insults, humiliation.
-3.  **Honeymoon:** Apologies, gifts, love bombing.
-*   **Thresholds:** It adjusts sensitivity based on the active phase. A "joke" during the *Explosion* phase is treated differently than in the *Honeymoon* phase.
-
-### 3. Safety-First Architecture
-*   **Emergency Override:** If the model detects a 911/Life-Threatening situation, the UI immediately locks into **RED ALERT** mode, regardless of the prompt.
-*   **Benign Filter:** Filters out tech support complaints ("My computer is broken") from actual threats, reducing false positives.
-*   **Safety Plan:** Generates dynamic, actionable safety advice based on the specific type of abuse detected.
-
-### 4. Forensic Reporting
-*   **DARVO Score:** Calculates the likelihood of "Reverse Victim" tactics.
-*   **Exportable Report:** Generates a professional `.docx` report summarizing the analysis for therapists or legal counsel.
+| Risk Level | Label | Description | Example |
+| :--- | :--- | :--- | :--- |
+| **CRITICAL** | `urgent_emergency` | Life-threatening situations. Triggers immediate UI Red Alert. | *"Call 911", "He has a knife", "Help me"* |
+| **CRITICAL** | `threatening_intimidation` | Overt threats of harm to self, partner, or pets. | *"If you leave, you'll never see the kids again."* |
+| **EXTREME** | `coercive_control` | Controlling behavior masked as protection or love. | *"I deleted your social media because it makes you anxious."* |
+| **HIGH** | `gaslighting` | Denying reality to make the victim doubt their sanity. | *"I never said that. You're imagining things again."* |
+| **HIGH** | `belittling_ridicule` | Insults designed to lower self-esteem. | *"You're so stupid, nobody else would put up with you."* |
+| **MODERATE** | `stonewalling` | Refusing to communicate to punish the partner. | *"..." (Silence for days)* |
+| **MODERATE** | `guilt_tripping` | Using guilt to manipulate behavior. | *"I guess my feelings don't matter to you."* |
+| **MODERATE** | `love_bombing` | Excessive affection used to hook or reclaim a victim. | *"We are twin flames. You are my destiny."* |
+| **MODERATE** | `deflection` | Shifting blame away from oneself. | *"I wouldn't get angry if you didn't provoke me."* |
+| **LOW** | `passive_aggression` | Indirect expression of hostility. | *"Fine. Do whatever you want like you always do."* |
+| **LOW** | `whataboutism` | Counter-accusing to avoid accountability. | *"What about that time YOU forgot to call?"* |
+| **LOW** | `appeal_to_emotion` | Manipulating emotions without logic. | *"If you loved me, you would do this."* |
+| **SAFE** | `ethical_persuasion` | Healthy negotiation and "I" statements. | *"I feel hurt when you yell. Can we talk calmly?"* |
+| **SAFE** | `healthy_conflict` | Disagreement without toxicity. | *"I disagree with your choice, but I respect it."* |
+| **SAFE** | `benign_venting` | Frustration directed at external factors (work, games). | *"I hate this stupid boss! He's an idiot."* |
+| **SAFE** | `benign_affection` | Normal expressions of love. | *"I miss you, can't wait to see you."* |
+| **SAFE** | `neutral_logistics` | Planning and coordination. | *"Did you pick up the milk?"* |
+| **SAFE** | `neutral_conversation` | General chit-chat. | *"The movie was okay."* |
 
 ---
 
-## 🛠️ Installation
+## 🌟 Powerful App Capabilities
 
-### Prerequisites
+### 🎯 Forensic Target Selection
+ManTacAi isn't just a classified; it's a **forensic tool**.
+*   **Sender Filtering:** You can input a chat log containing two people (e.g., "Alex: ...", "Sarah: ...") and tell the AI to **only analyze "Alex"**. It intelligently parses the log, ignores the other person, and builds a psychological profile of the suspect alone.
+*   **Smart Log Parsing:** It automatically strips timestamps (e.g., `[14:30]`) and metadata to focus purely on linguistic patterns.
+
+### 🧠 The Context Window (Memory)
+Unlike simple chatbots, ManTacAi has **Long-Term Memory** via its Context Engine.
+*   **Sequential Analysis:** It reads messages in order. A "Love Bombing" message sent *after* an "Explosion" is flagged differently than one sent at the start.
+*   **Persistence Tracking:** It tracks how long a tactic (like Stonewalling) has been happening. If silence persists for multiple turns, the risk score escalates.
+
+### 🛡️ Safety & Reporting
+*   **Dynamic Safety Plan:** Based on the specific abuse detected (e.g., Financial Control vs. Physical Threat), the app generates a custom safety checklist.
+*   **Professional Reporting:** Click "Download Report" to generate a **Forensic .docx File**. This report summarizes risk levels, primary tactics, and DARVO scores, suitable for sharing with therapists or legal counsel.
+*   **Benign Filter:** A "Common Sense" layer that filters out frustration about work, traffic, or video games, preventing false alarms.
+
+---
+
+## 🧠 Architecture: How It Works
+
+The system processes every message through **Three Layers of Logic**:
+
+### Layer 1: The Transformer (V8 Model)
+*   **Engine:** `DistilRoBERTa` (Fine-Tuned)
+*   **Function:** Reads raw text and outputs probability scores for all 18 classes.
+*   **Result:** "Message A = 85% Gaslighting, 10% Deflection".
+
+### Layer 2: The Context Engine (State Machine)
+Abuse happens in a cycle. The engine tracks a hidden "Cycle State" across the conversation:
+1.  **Tension Building:** Sustained passive aggression or stonewalling.
+2.  **Explosion:** Threats or ridicule.
+3.  **Honeymoon:** Sudden love bombing *after* an explosion.
+*   **Logic:** If the cycle is in `Honeymoon` phase, the risk score of "sweet" messages is artificially raised (Threshold > 55%) because they are likely manipulative in this context.
+
+### Layer 3: The Safety Guardrails
+*   **Emergency Override:** If `urgent_emergency` is detected, the UI locks to **RED**, ignoring all other logic.
+*   **DARVO Calculator:** Scores the presence of Deny, Attack, and Reverse Victim tactics.
+
+---
+
+## 🛠️ Installation & Setup
+
+### 1. Prerequisites
 *   Python 3.10+
-*   Git (with **Git LFS** support for big model files)
+*   Git (with **Git LFS** enabled)
 
-### Step 1: Clone the Repository
-This repository uses Git LFS to store the ~500MB model weights.
+### 2. Clone Repository
 ```bash
 git lfs install
 git clone https://github.com/your-username/ManTacAi.git
 cd ManTacAi
 ```
 
-### Step 2: Install Dependencies
+### 3. Install Dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
----
-
-## 🚦 Usage
-
-1.  **Launch the App**:
-    ```bash
-    python app.py
-    ```
-2.  **Access UI**: Open your browser at `http://127.0.0.1:7860`.
-3.  **Analyze**:
-    *   Paste chat logs into the input boxes.
-    *   (Optional) Check the "Safety Checklist" items.
-    *   Click **Analyze**.
-4.  **Review**:
-    *   See the **Risk Score** (Low/Moderate/High/Critical).
-    *   Read the **Cycle Phase** analysis.
-    *   Download the **Word Report**.
+### 4. Run the Application
+```bash
+python app.py
+```
+*   Access the Web UI at: `http://127.0.0.1:7860`
 
 ---
 
-## 🧠 How It Works (Architecture)
+## 📂 Project Structure
 
-The system is a **Hybrid AI**:
-
-1.  **Layer 1: The Transformer (V8 Model)**
-    *   A Fine-Tuned `DistilRoBERTa` model.
-    *   Input: Raw text.
-    *   Output: Probabilities for 18 tactic classes.
-
-2.  **Layer 2: The Context Engine (Rule-Based)**
-    *   Input: Model predictions + Timestamp + History.
-    *   Logic:
-        *   *State Machine:* Tracks persistence of abuse (e.g., if "Guilt Tripping" persists for >3 turns, enter "Tension" phase).
-        *   *Overrides:* If Phase = Honeymoon AND Score > 55%, force **High Risk**.
-
-3.  **Layer 3: The Safety & Scoring Layer**
-    *   Calculates `DARVO` score.
-    *   Applies `Emergency` patches.
-    *   Generates the final Verdict.
+*   `app.py`: The main Gradio application and UI logic.
+*   `manipulation_detection/`: Core Python package.
+    *   `src/inference/`: Model loading (`model.py`) and scoring logic (`scoring.py`).
+    *   `src/utils/`:
+        *   `context_engine.py`: The Cycle of Abuse state machine.
+        *   `safety.py`: Emergency planning logic.
+        *   `report.py`: Text report generator.
+*   `manipulation_tactic_detector_model/`: The V8 model weights (`.safetensors`).
+*   `dataset_augmented/`: The high-quality synthetic training data (JSON).
+*   `scripts/`: Tools used to generate data and train the model.
 
 ---
 
-## ⚠️ Disclaimer
-**ManTacAi is an educational and support tool, not a diagnostic medical device.** 
-Always prioritize physical safety. If you are in danger, contact local emergency services immediately.
+## ⚠️ Limitations
+*   **Short Text Paranoia:** The model can sometimes flag ultra-short texts (e.g., "Ok", "Fine") as *Stonewalling* because it lacks tone cues.
+*   **Anxiety vs Abuse:** Phrases like "Am I crazy?" can trigger *Gaslighting* flags because the model associates the word "crazy" with abuse.
+*   **Usage:** This tool is for **educational and forensic analysis**. It is not a replacement for human judgment or professional therapy.
 
 ---
-*ManTacAi V8 - Built for Safety.*
+
+## 📄 License
+This project is open-source.
