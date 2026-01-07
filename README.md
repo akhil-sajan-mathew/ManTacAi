@@ -118,10 +118,10 @@ python app.py
 
 ---
 
-## ⚠️ Limitations
-*   **Short Text Paranoia:** The model can sometimes flag ultra-short texts (e.g., "Ok", "Fine") as *Stonewalling* because it lacks tone cues.
-*   **Anxiety vs Abuse:** Phrases like "Am I crazy?" can trigger *Gaslighting* flags because the model associates the word "crazy" with abuse.
-*   **Usage:** This tool is for **educational and forensic analysis**. It is not a replacement for human judgment or professional therapy.
+## ⚠️ Implementation Notes & Best Practices
+*   **Quality Over Quantity:** To ensure high-confidence results, the system automatically filters out extremely short or ambiguous fragments (e.g., one-word replies). It is optimized for analyzing meaningful sentences and conversations.
+*   **Safety-First Sensitivity:** ManTacAi is tuned to be hyper-vigilant. Occasionally, it may flag severe distress signals (like "Am I crazy?") as potential gaslighting. This "better safe than sorry" approach ensures that potential manipulation is captured for human review.
+*   **Professional Aid:** This is a sophisticated forensic tool designed to support—not replace—human judgment. It provides data points to help users, therapists, and legal professionals see the full picture.
 
 ---
 
