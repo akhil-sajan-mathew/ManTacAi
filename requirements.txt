@@ -1,0 +1,17 @@
+# Core ML
+torch>=2.0.0
+transformers>=4.30.0
+numpy>=1.24.0
+
+# Application UI
+gradio>=3.35.0
+
+# Utilities
+python-docx>=0.8.11
+
+# Data Processing (Optional for Training)
+pandas>=2.0.0
+scikit-learn>=1.3.0
+evaluate>=0.4.0
+datasets>=2.12.0
+accelerate>=0.20.0
