@@ -43,43 +43,41 @@ A state-of-the-art forensic AI system designed to detect, classify, and analyze 
 
 ## 🏗️ System Architecture
 
-ManTacAi uses a **Hybrid 3-Layer Logic** system to balance raw AI power with human-defined safety rules.
+ManTacAi uses a **Hybrid 3-Layer Logic** system to balance raw AI power with human-defined safety and linguistic precision.
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           ManTacAi Architecture                         │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────────────────┐   │
-│  │ Input Text   │───▶│ Preprocessor │───▶│ Layer 1: The Brain       │   │
-│  │ (Chat Logs)  │    │              │    │ (Deep Learing Model)     │   │
-│  └──────────────┘    │ • Normalize  │    │                          │   │
-│                      │ • Tokenize   │    │ • DistilRoBERTa V8       │   │
-│                      │ • Filter     │    │ • 18-Class Output        │   │
-│                      │   (Len > 4)  │    │ • Probability Scores     │   │
-│                      └──────────────┘    │                          │   │
-│                                          └──────────┬───────────────┘   │
-│                                                     │                   │
-│                                                     ▼                   │
-│  ┌──────────────┐                       ┌──────────────────────┐        │
-│  │ Layer 3:     │◀──────────────────────│ Layer 2: Context     │        │
-│  │ Safety Lock  │                       │ Engine (The Memory)  │        │
-│  │ (Guardrails) │                       │                      │        │
-│  └──────┬───────┘                       │ • Tracks "Cycle"     │        │
-│         │                               │ • Adjusts Risk       │        │
-│         │                               │   Thresholds         │        │
-│         │                               └──────────┬───────────┘        │
-│         │                                          │                    │
-│         ▼                                          ▼                    │
-│  ┌──────────────────────────────────────────────────────────────┐       │
-│  │                     Forensic Output                          │       │
-│  │  • Verdict: "High Risk - Gaslighting Pattern Detected"       │       │
-│  │  • Evidence: "You're imagining things" (Confidence: 99%)     │       │
-│  │  • Cycle State: "Explosion Phase"                            │       │
-│  │  • Report: generated_report.docx                             │       │
-│  └──────────────────────────────────────────────────────────────┘       │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            ManTacAi Architecture                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌──────────────┐    ┌────────────────────┐    ┌────────────────────────┐   │
+│  │ Input Text   │───▶│ Layer 1: NLP Core  │───▶│ Layer 2: The Brain     │   │
+│  │ (Chat Logs)  │    │ (spaCy + Regex)    │    │ (Deep Learning Model)  │   │
+│  └──────────────┘    │                    │    │                        │   │
+│                      │ • Tokenize/Lemma   │    │ • DistilRoBERTa V8     │   │
+│                      │ • "Smart" Regex    │    │ • 18-Class Probabilities│  │
+│                      │ • Keyword Filter   │    │ • Semantic Vectors     │   │
+│                      └──────────────┬─────┘    └──────────┬─────────────┘   │
+│                                     │                     │                 │
+│                                     ▼                     ▼                 │
+│  ┌──────────────┐    ┌────────────────────┐    ┌────────────────────────┐   │
+│  │ Layer 4:     │◀───│ Layer 3: Context   │◀───│ Layer 2.5: Semantic    │   │
+│  │ Safety V2    │    │ Engine (Memory)    │    │ Threat Engine          │   │
+│  │ (Circuit     │    │                    │    │                        │   │
+│  │  Breaker)    │    │ • Cycle Tracking   │    │ • Cosine Similarity    │   │
+│  │              │    │ • Anti-Dampening   │    │ • Slang/Code Detection │   │
+│  └──────┬───────┘    └────────────────────┘    └────────────────────────┘   │
+│         │                                                                   │
+│         ▼                                                                   │
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │                          Forensic Output                             │   │
+│  │  • Verdict: "CRITICAL RISK - Direct Threat Detected"                 │   │
+│  │  • Evidence: "I will ending you" (Lemma Match: "end")                │   │
+│  │  • Cycle State: "Explosion Phase" (Circuit Breaker Active)           │   │
+│  │  • Report: generated_report.docx                                     │   │
+│  └──────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -87,29 +85,19 @@ ManTacAi uses a **Hybrid 3-Layer Logic** system to balance raw AI power with hum
 ## 🧠 AI Models
 
 ### V8 Manipulation Detector (Fine-Tuned Transformer)
-
 **Purpose**: Classify specific psychological tactics in conversational text.
-
 **Architecture**: DistilRoBERTa-Base (Fine-tuned)
 
-```
-Input Layer         : Tokenized Text (Max Len 512)
-├── Transformer Block 1 - 6 : Self-Attention Heads (12)
-├── Dropout(0.1)
-├── Classification Head
-│   ├── Dense(768)
-│   ├── Tanh Activation
-│   ├── Dropout(0.1)
-│   └── Dense(18) → [Gaslighting, Love Bombing, ..., Neutral]
-└── Output: Softmax Probability Distribution
-```
+### Semantic Threat Engine (Vector Embeddings)
+**Purpose**: Detect **Conceptual Threats** (slang, coded language) that bypass keyword filters.
+**Mechanism**:
+*   Extracts 768-dimensional vector from the Transformer's hidden state.
+*   Calculates **Cosine Similarity** against a pre-computed "Direct Threat" centroid.
+*   **Trigger**: >0.90 similarity flags as CRITICAL immediately.
 
-| Metric | Value |
-|--------|-------|
-| **Test Accuracy** | **96.80%** |
-| **Test F1 Score** | **96.71%** |
-| Max Sequence | 512 Tokens |
-| Inference Time | ~45ms per message (CPU) |
+### NLP Normalization Engine (spaCy)
+**Purpose**: Smart pattern matching using **Lemmatization**.
+**Benefit**: Reduces 1,000+ regex permutations (e.g., *kill, killing, killed*) to a single root form (*kill*), improving recall by ~40%.
 
 ---
 
@@ -134,18 +122,15 @@ Input Layer         : Tokenized Text (Max Len 512)
 
 ## ⚙️ Technical Specifications
 
-### Risk Assessment Logic
+### Risk Assessment Logic (Safety Core V2)
 The raw probability is not enough. We calculate a weighted **Risk Score**:
 
 ```python
-Risk Score = (Max_Prob * Severity_Weight)
-
-# Severity Weights:
-# - Urgent Emergency: 0.0 (Handled by Override)
-# - Coercive Control: 1.0 (Critical)
-# - Gaslighting:      0.9 (High)
-# - Passive Aggress:  0.4 (Moderate)
+Risk Score = (Max_Prob * Severity_Weight * Dampening_Factor)
 ```
+
+1.  **Anti-Dampening (Trojan Horse Defense)**: High-risk heuristics (e.g., Financial Abuse) are *dampened* (0.1x) in safe contexts but **unlocked** (1.0x) if violence is detected.
+2.  **Safety Floor**: If the AI model predicts >85% confidence for a threat, heuristics CANNOT lower the score.
 
 ### Context Engine (Cycle of Abuse)
 The system maintains a rolling state window to detect the **Cycle of Abuse**:
@@ -153,7 +138,8 @@ The system maintains a rolling state window to detect the **Cycle of Abuse**:
 2.  **Explosion**: High confidence Threats or Belligerence.
 3.  **Honeymoon**: Sudden shift to Love Bombing/Apologies after an Explosion.
 
-*If "Honeymoon" is detected within 10 messages of "Explosion", the Risk Score is forcibly elevated regardless of the message content.*
+**Circuit Breaker Protocol**:
+*   If ANY message exceeds **0.85 Risk Score** (Critical), the phase is **IMMEDIATELY** forced to "Explosion", overriding any "Honeymoon" attempt. This prevents abusers from "resetting" the cycle instantly.
 
 ---
 
@@ -172,7 +158,10 @@ cd ManTacAi
 # 2. Install dependencies
 pip install -r requirements.txt
 
-# 3. (Optional) Install LFS for Model Weights
+# 3. Download spaCy Model (Required for Phase 22)
+python -m spacy download en_core_web_sm
+
+# 4. (Optional) Install LFS for Model Weights
 git lfs install
 git lfs pull
 ```
@@ -181,18 +170,31 @@ git lfs pull
 
 ## 📖 Usage
 
-### Running the Desktop App (GUI)
-The primary interface is a local Gradio web app.
+### Running the ManTacAi Suite (React + FastAPI)
+The system now uses a modern **Client-Server Architecture**:
+1.  **Backend**: FastAPI Server (Python) for heavy AI processing.
+2.  **Frontend**: Next.js Dashboard (React) for real-time visualization.
 
+#### 1. Start the Backend
 ```bash
-python app.py
+cd backend
+python main.py
 ```
-*Creates a local server at `http://127.0.0.1:7860`*
+*Server starts at `http://localhost:8000`*
 
-### Features:
-1.  **Paste & Analyze**: Copy complex chat logs into the text box.
-2.  **Report Generation**: Click "Export Report" to get a `.docx` summary.
-3.  **Pattern View**: See the visual distribution of tactics (e.g., "30% Gaslighting").
+#### 2. Start the Frontend
+Open a new terminal:
+```bash
+cd frontend
+npm install  # First time only
+npm run dev
+```
+*Dashboard accessible at `http://localhost:3000`*
+
+### Features (UI V2):
+1.  **Holographic Dashboard**: Real-time Risk Radar, Phase Tracking, and "Glassmorphism" design.
+2.  **Live Stream Analysis**: Paste logs or type directly to see per-message risk scoring.
+3.  **Forensic Export**: One-click generation of professional court-ready reports.
 
 ---
 
