@@ -14,9 +14,12 @@ base_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(base_dir, "manipulation_detection", "src"))
 
 from inference.model import ManipulationModel
+from inference.model import ManipulationModel
 from inference.scoring import calculate_risk_score, calculate_darvo_score
 from inference.semantic_engine import SemanticAnalyzer
 from utils.context_engine import ContextEngine
+from utils.action_handlers.narrative_generator import generate_narrative_summary
+from utils.action_handlers.narrative_generator import generate_narrative_summary
 
 # --- INITIALIZATION ---
 app = FastAPI(title="ManTacAi API", version="2.0.0")
@@ -79,69 +82,80 @@ class AnalysisResponse(BaseModel):
 
 # --- UTILITIES ---
 
-def parse_chat_log(log_text: str, suspect_name: str = "") -> List[Dict]:
-    """
-    Parses chat log using the robust regex logic
-    """
-    # 0. Blob Pre-processing
-    log_text = re.sub(r'([^\n])(\[?\d{1,2}:\d{2})', r'\1\n\2', log_text)
-    
+def parse_chat_log(log_text: str, suspect_name: str = ""):
     lines = log_text.split('\n')
     parsed_events = []
+    
+    current_speaker = "Subject B" # Default
     current_ts = time.time()
+    
+    # 1. Bracketed: [anything] Name: Message
+    re_bracket = re.compile(r'^\[.*?\]\s*([^:\-]+)[:\-]\s*(.*)$')
+    # 2. Discord: Name — Date at Time
+    re_discord = re.compile(r'^([^—\-]+)\s+[—\-]\s+(?:Today at|Yesterday at|[0-9/]+)\s+\d{1,2}:\d{2}\s*(?:AM|PM|am|pm)?$', re.IGNORECASE)
+    # 3. Standard WA text: Date, Time - Name: Message
+    re_wa = re.compile(r'^[\d/,\s]+(?:AM|PM|am|pm)?\s*-\s*([^:]+):\s*(.*)$')
+    # 4. Simple: Name: Message
+    re_simple = re.compile(r'^([a-zA-Z0-9_ \-]{2,20})[:\-]\s+(.*)$')
     
     for line in lines:
         line = line.strip()
         if not line: continue
         
-        # Timestamp Extraction
-        match = re.search(r'\[?(\d{1,2}:\d{2}(?:\s?[APap][Mm])?)\]?', line)
-        if match:
-            try:
-                dt_str = match.group(1)
-                fmt = "%H:%M" if "M" not in dt_str.upper() else "%I:%M %p"
-                dt = datetime.strptime(dt_str, fmt)
-                current_ts = datetime.combine(date.today(), dt.time()).timestamp()
-                line = re.sub(r'\[?(\d{1,2}:\d{2}(?:\s?[APap][Mm])?)\]?[:\-]?\s*', '', line).strip()
-            except: pass
-            
-        # Filtering / Attribution
-        sender = "unknown"
-        sender_name = "Subject B" # Default Display Name
-        clean_content = line
+        is_header = False
+        msg_content = line
+        speaker_match = None
         
-        # Check for explicitly named sender (e.g. "Alex:" or "You:")
-        name_match = re.match(r'^([^:\-]{1,20})[:\-]\s+', line)
-        if name_match:
-            extracted_name = name_match.group(1).strip()
-            # Clip the name part
-            clean_content = line[name_match.end():].strip()
-            sender_name = extracted_name
-            
-            if suspect_name and suspect_name.lower() in extracted_name.lower():
-                sender = "suspect"
-            elif extracted_name.lower() in ["you", "me", "myself"]:
-                 sender = "victim"
-                 sender_name = "You"
+        m_disc = re_discord.match(line)
+        if m_disc:
+            speaker_match = m_disc.group(1).strip()
+            msg_content = ""
+            is_header = True
+        else:
+            m_brack = re_bracket.match(line)
+            if m_brack:
+                speaker_match = m_brack.group(1).strip()
+                msg_content = m_brack.group(2).strip()
+                is_header = True
             else:
-                 # THIRD PARTY / OTHER PARTICIPANT
-                 sender = "other"
+                m_wa = re_wa.match(line)
+                if m_wa:
+                    speaker_match = m_wa.group(1).strip()
+                    msg_content = m_wa.group(2).strip()
+                    is_header = True
+                else:
+                    m_simple = re_simple.match(line)
+                    if m_simple:
+                        speaker_match = m_simple.group(1).strip()
+                        msg_content = m_simple.group(2).strip()
+                        is_header = True
         
-        # Legacy Fallback (No name prefix, usually victim/you continuation or unformatted)
-        elif suspect_name and re.match(f"^{re.escape(suspect_name)}", line, re.IGNORECASE):
-             sender = "suspect"
-             sender_name = suspect_name
-        elif len(line) >= 2:
-             # Default to "You" if it's just text without a name
-             sender = "victim"
-             sender_name = "You"
-
-        if len(clean_content) >= 2:
+        if is_header and speaker_match:
+            current_speaker = speaker_match
+            
+        if not msg_content:
+            continue
+            
+        sender = "unknown"
+        lower_speaker = current_speaker.lower()
+        if suspect_name and suspect_name.lower() in lower_speaker:
+            sender = "suspect"
+        elif lower_speaker in ["you", "me", "myself", "subject a"]:
+            sender = "victim"
+            current_speaker = "You"
+        elif lower_speaker == "subject b":
+            sender = "unknown" # Keep default logic
+        else:
+            sender = "other"
+            
+        if parsed_events and parsed_events[-1]['sender_name'] == current_speaker:
+            parsed_events[-1]['msg'] += " " + msg_content
+        else:
             parsed_events.append({
-                'msg': clean_content, 
-                'ts': current_ts, 
+                'msg': msg_content,
                 'sender': sender,
-                'sender_name': sender_name
+                'sender_name': current_speaker,
+                'ts': current_ts
             })
             
     return parsed_events
@@ -273,6 +287,27 @@ async def analyze_chat(request: AnalyzeRequest):
         timeline=history_risk,
         radar_chart_data=formatted_radar
     )
+
+class NarrativeResponse(BaseModel):
+    narrative: str
+
+@app.post("/api/full-analysis", response_model=NarrativeResponse)
+async def get_full_analysis(request: dict):
+    """
+    Consumes the metrics output payload from the frontend to generate 
+    a contextual read-out of the abuse dynamics.
+    """
+    narrative = generate_narrative_summary(request)
+    return NarrativeResponse(narrative=narrative)
+
+
+class NarrativeResponse(BaseModel):
+    narrative: str
+
+@app.post("/api/full-analysis", response_model=NarrativeResponse)
+async def get_full_analysis(request: dict):
+    narrative = generate_narrative_summary(request)
+    return NarrativeResponse(narrative=narrative)
 
 @app.post("/api/reset")
 def reset_session():

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { HolographicHUD } from './components/HolographicHUD';
 import { ChatStream } from './components/ChatStream';
 import { RiskRadar } from './components/RiskRadar';
+import { ActionButtons } from './components/ActionButtons';
 import { GlassCard } from './components/ui/GlassCard';
 import { ShieldCheck, Play, Terminal, Cpu, Trash2 } from 'lucide-react';
 
@@ -339,8 +340,9 @@ function App() {
                */}
               <ChatStream segments={data?.segments} />
             </div>
-            <div className="lg:col-span-4">
+            <div className="lg:col-span-4 flex flex-col gap-6">
               <RiskRadar data={computedMetrics?.radar_chart_data || data?.radar_chart_data} />
+              {(computedMetrics || data) && <ActionButtons data={computedMetrics || data} />}
             </div>
           </div>
 
