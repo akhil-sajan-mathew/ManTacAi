@@ -1,28 +1,100 @@
 import React, { useState } from 'react';
-import { BarChart2, Download, Phone, Loader2 } from 'lucide-react';
+import { BarChart2, Download, Phone, Loader2, ChevronUp } from 'lucide-react';
 import { GlassCard } from './ui/GlassCard';
 import { HelplineModal } from './HelplineModal';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+/**
+ * Lightweight markdown-to-JSX renderer for the narrative output.
+ * Handles: ## headings, **bold**, - bullet lists, ---, and \n paragraphs.
+ */
+function renderMarkdown(text) {
+    if (!text) return null;
+    const lines = text.split('\n');
+    const elements = [];
+    let listBuffer = [];
+
+    const flushList = () => {
+        if (listBuffer.length > 0) {
+            elements.push(
+                <ul key={`ul-${elements.length}`} className="space-y-1.5 my-2 ml-1">
+                    {listBuffer.map((item, i) => (
+                        <li key={i} className="flex items-start gap-2 text-slate-300 text-sm leading-relaxed">
+                            <span className="text-neon-cyan mt-1 shrink-0">›</span>
+                            <span dangerouslySetInnerHTML={{ __html: boldify(item) }} />
+                        </li>
+                    ))}
+                </ul>
+            );
+            listBuffer = [];
+        }
+    };
+
+    const boldify = (s) => s.replace(/\*\*(.+?)\*\*/g, '<strong class="text-slate-100 font-semibold">$1</strong>');
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+
+        if (line.startsWith('## ')) {
+            flushList();
+            elements.push(
+                <h3 key={`h-${i}`} className="font-orbitron text-sm tracking-wider uppercase text-neon-cyan/90 mt-4 mb-2 first:mt-0 border-b border-neon-cyan/10 pb-1">
+                    {line.replace('## ', '')}
+                </h3>
+            );
+        } else if (line.startsWith('- ')) {
+            listBuffer.push(line.slice(2));
+        } else if (line === '---') {
+            flushList();
+            elements.push(<hr key={`hr-${i}`} className="border-slate-700/50 my-4" />);
+        } else if (line.startsWith('*') && line.endsWith('*') && !line.startsWith('**')) {
+            flushList();
+            elements.push(
+                <p key={`em-${i}`} className="text-slate-500 text-xs italic mt-3">
+                    {line.replace(/^\*|\*$/g, '')}
+                </p>
+            );
+        } else if (line.trim()) {
+            flushList();
+            elements.push(
+                <p key={`p-${i}`} className="text-slate-300 text-sm leading-relaxed my-1.5" dangerouslySetInnerHTML={{ __html: boldify(line) }} />
+            );
+        }
+    }
+    flushList();
+    return elements;
+}
 
 export function ActionButtons({ data }) {
     const [loadingAnalysis, setLoadingAnalysis] = useState(false);
     const [narrative, setNarrative] = useState(null);
+    const [isAnalysisOpen, setIsAnalysisOpen] = useState(false);
     const [isHelplineOpen, setIsHelplineOpen] = useState(false);
 
     const handleFullAnalysis = async () => {
+        // Toggle: if already open, close it
+        if (isAnalysisOpen && narrative) {
+            setIsAnalysisOpen(false);
+            return;
+        }
+
         if (!data) return;
         setLoadingAnalysis(true);
         setNarrative(null);
         try {
-            const res = await fetch('http://localhost:8000/api/full-analysis', {
+            const res = await fetch(`${API_URL}/api/full-analysis`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)
             });
             const result = await res.json();
             setNarrative(result.narrative);
+            setIsAnalysisOpen(true);
         } catch (error) {
             console.error("Analysis Failed:", error);
             setNarrative("Analysis failed to generate. Please ensure the backend is running.");
+            setIsAnalysisOpen(true);
         } finally {
             setLoadingAnalysis(false);
         }
@@ -77,17 +149,22 @@ ${data.timeline?.map(t => `[${t.time}] Risk: ${(t.risk * 100).toFixed(1)}%`).joi
                 <div className="absolute inset-0 bg-gradient-to-r from-neon-cyan/10 to-transparent translate-x-[-100%] group-hover:translate-x-0 transition-transform duration-500 ease-in-out" />
                 <div className="relative z-10 font-orbitron text-neon-cyan/80 group-hover:text-neon-cyan flex items-center justify-between">
                     <span className="tracking-widest uppercase text-sm font-semibold">
-                        {loadingAnalysis ? "Analyzing Patterns..." : "Full Analysis"}
+                        {loadingAnalysis ? "Analyzing Patterns..." : isAnalysisOpen ? "Close Analysis" : "Full Analysis"}
                     </span>
-                    {loadingAnalysis ? <Loader2 className="animate-spin" size={20} /> : <BarChart2 size={20} />}
+                    {loadingAnalysis
+                        ? <Loader2 className="animate-spin" size={20} />
+                        : isAnalysisOpen
+                            ? <ChevronUp size={20} />
+                            : <BarChart2 size={20} />
+                    }
                 </div>
             </button>
 
-            {narrative && (
-                <GlassCard className="p-4 border border-neon-cyan/50 bg-black/80 animate-in fade-in slide-in-from-top-4 duration-500">
-                    <p className="font-sans text-slate-300 text-sm leading-relaxed">
-                        {narrative}
-                    </p>
+            {isAnalysisOpen && narrative && (
+                <GlassCard className="p-5 border border-neon-cyan/20 bg-gradient-to-b from-black/90 to-slate-900/60 animate-in fade-in slide-in-from-top-4 duration-500 max-h-[70vh] overflow-y-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-neon-cyan/20">
+                    <div className="space-y-1">
+                        {renderMarkdown(narrative)}
+                    </div>
                 </GlassCard>
             )}
 
@@ -123,3 +200,4 @@ ${data.timeline?.map(t => `[${t.time}] Risk: ${(t.risk * 100).toFixed(1)}%`).joi
         </div>
     );
 }
+

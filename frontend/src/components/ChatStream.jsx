@@ -40,7 +40,7 @@ export function ChatStream({ segments }) {
             >
                 <AnimatePresence initial={false}>
                     {segments.map((seg, idx) => (
-                        <ChatBubble key={idx} segment={seg} index={idx} />
+                        <ChatBubble key={`${seg.ts}-${seg.sender_name}-${idx}`} segment={seg} index={idx} />
                     ))}
                 </AnimatePresence>
             </div>
@@ -61,7 +61,7 @@ function ChatBubble({ segment, index }) {
         <motion.div
             initial={{ opacity: 0, x: isMe ? 20 : -20, scale: 0.95 }}
             animate={{ opacity: 1, x: 0, scale: 1 }}
-            transition={{ duration: 0.3, delay: index * 0.05 }}
+            transition={{ duration: 0.3, delay: Math.min(index * 0.05, 1.5) }}
             className={`flex w-full group ${isMe ? 'justify-end' : 'justify-start'}`}
         >
             {/* Avatar for Non-Me Users */}

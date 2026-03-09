@@ -4,52 +4,88 @@ import re
 import time
 from datetime import datetime, date
 from typing import List, Optional, Dict, Any
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, field_validator
 
 # --- PATH SETUP ---
-# Ensure we can import from manipulation_detection
+# Add manipulation_detection/src to path for internal imports
+# TODO: Migrate to proper pip install -e . once internal imports use relative style
 base_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(os.path.join(base_dir, "manipulation_detection", "src"))
+sys.path.insert(0, os.path.join(base_dir, "manipulation_detection", "src"))
 
-from inference.model import ManipulationModel
 from inference.model import ManipulationModel
 from inference.scoring import calculate_risk_score, calculate_darvo_score
 from inference.semantic_engine import SemanticAnalyzer
 from utils.context_engine import ContextEngine
 from utils.action_handlers.narrative_generator import generate_narrative_summary
-from utils.action_handlers.narrative_generator import generate_narrative_summary
+
+# Dependency providers
+from dependencies import get_detector_model, get_semantic_analyzer, get_context_engine
 
 # --- INITIALIZATION ---
 app = FastAPI(title="ManTacAi API", version="2.0.0")
 
-# Enable CORS for React Frontend (Port 5173)
+# Enable CORS for React Frontend
+allowed_origins = os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Allow all for development
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Load Models
-try:
-    # Model path relative to backend/
-    model_path = os.path.join(base_dir, "manipulation_tactic_detector_model")
-    detector_model = ManipulationModel(model_path=model_path)
-    print("✅ Model Loaded Successfully")
-except Exception as e:
-    print(f"⚠️ Warning: Custom model not found, using default. Error: {e}")
-    detector_model = ManipulationModel() # Fallback
+# --- API KEY AUTHENTICATION (Optional) ---
+# Set MANTACAI_API_KEY env var to enable; unset to disable (local dev)
+_api_key = os.environ.get("MANTACAI_API_KEY")
 
-# Initialize Semantic Engine (Phase 23)
-semantic_analyzer = SemanticAnalyzer()
-semantic_analyzer.compute_centroids(detector_model)
+@app.middleware("http")
+async def verify_api_key(request: Request, call_next):
+    # Skip auth if no API key is configured, or for health/CORS preflight
+    if not _api_key or request.method == "OPTIONS" or request.url.path == "/":
+        return await call_next(request)
 
-# Initialize Context Engine
-context_path = os.path.join(base_dir, "context_state.json")
-context_engine = ContextEngine(persistence_file=context_path)
+    provided_key = request.headers.get("X-API-Key")
+    if provided_key != _api_key:
+        return JSONResponse(status_code=401, content={"detail": "Invalid or missing API key"})
+
+    return await call_next(request)
+
+# --- RATE LIMITING ---
+import collections
+
+_rate_limit = int(os.environ.get("RATE_LIMIT_PER_MINUTE", "30"))
+_request_log: dict = collections.defaultdict(list)
+
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    """Simple in-memory rate limiter for the analyze endpoint."""
+    if request.method != "POST" or "/api/analyze" not in request.url.path:
+        return await call_next(request)
+
+    client_ip = request.client.host if request.client else "unknown"
+    now = time.time()
+
+    # Clean old entries (older than 60s)
+    _request_log[client_ip] = [t for t in _request_log[client_ip] if now - t < 60]
+
+    if len(_request_log[client_ip]) >= _rate_limit:
+        return JSONResponse(
+            status_code=429,
+            content={"detail": f"Rate limit exceeded. Max {_rate_limit} requests per minute."}
+        )
+
+    _request_log[client_ip].append(now)
+    return await call_next(request)
+
+
+# Eagerly load models at startup to fail fast
+@app.on_event("startup")
+def startup_load_models():
+    get_detector_model()
+    get_semantic_analyzer()
 
 # --- DATA MODELS ---
 
@@ -58,6 +94,13 @@ class AnalyzeRequest(BaseModel):
     suspect_name: Optional[str] = ""
     stateless: bool = True # Default to True for testing stability
     context_factors: List[str] = [] # Context modifiers (e.g. "financial_dependency")
+
+    @field_validator('text')
+    @classmethod
+    def text_must_not_be_too_long(cls, v):
+        if len(v) > 50000:
+            raise ValueError('Text input exceeds maximum length of 50,000 characters')
+        return v
 
 class ChatSegment(BaseModel):
     msg: str
@@ -87,17 +130,74 @@ def parse_chat_log(log_text: str, suspect_name: str = ""):
     parsed_events = []
     
     current_speaker = "Subject B" # Default
-    current_ts = time.time()
+    base_ts = time.time()
+    msg_counter = 0  # For incrementing timestamps when no real ts is available
     
+    # Timestamp extraction patterns
+    re_ts_wa = re.compile(r'^(\d{1,2}/\d{1,2}/\d{2,4}),?\s+(\d{1,2}:\d{2})\s*(AM|PM|am|pm)?')
+    re_ts_bracket = re.compile(r'^\[(\d{4}-\d{2}-\d{2}\s+\d{1,2}:\d{2}(?::\d{2})?)\]')
+    re_ts_bracket_time = re.compile(r'^\[(\d{1,2}:\d{2})\s*(AM|PM|am|pm)?\]')
+
     # 1. Bracketed: [anything] Name: Message
     re_bracket = re.compile(r'^\[.*?\]\s*([^:\-]+)[:\-]\s*(.*)$')
     # 2. Discord: Name — Date at Time
     re_discord = re.compile(r'^([^—\-]+)\s+[—\-]\s+(?:Today at|Yesterday at|[0-9/]+)\s+\d{1,2}:\d{2}\s*(?:AM|PM|am|pm)?$', re.IGNORECASE)
     # 3. Standard WA text: Date, Time - Name: Message
-    re_wa = re.compile(r'^[\d/,\s]+(?:AM|PM|am|pm)?\s*-\s*([^:]+):\s*(.*)$')
+    re_wa = re.compile(r'^[\d/,:\s]+(?:AM|PM|am|pm)?\s*-\s*([^:]+):\s*(.*)$')
     # 4. Simple: Name: Message
     re_simple = re.compile(r'^([a-zA-Z0-9_ \-]{2,20})[:\-]\s+(.*)$')
     
+    def _extract_timestamp(line):
+        """Try to extract a Unix timestamp from a line. Returns float or None."""
+        # WhatsApp: 12/5/23, 10:30 AM
+        m = re_ts_wa.match(line)
+        if m:
+            date_str = m.group(1)
+            time_str = m.group(2)
+            ampm = m.group(3) or ""
+            try:
+                for fmt in ("%m/%d/%y %I:%M %p", "%m/%d/%Y %I:%M %p", 
+                            "%m/%d/%y %H:%M", "%m/%d/%Y %H:%M",
+                            "%d/%m/%y %I:%M %p", "%d/%m/%Y %I:%M %p",
+                            "%d/%m/%y %H:%M", "%d/%m/%Y %H:%M"):
+                    try:
+                        dt = datetime.strptime(f"{date_str} {time_str} {ampm}".strip(), fmt)
+                        return dt.timestamp()
+                    except ValueError:
+                        continue
+            except Exception:
+                pass
+
+        # Bracketed: [2024-01-15 10:30]
+        m = re_ts_bracket.match(line)
+        if m:
+            try:
+                dt = datetime.strptime(m.group(1), "%Y-%m-%d %H:%M")
+                return dt.timestamp()
+            except ValueError:
+                try:
+                    dt = datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S")
+                    return dt.timestamp()
+                except ValueError:
+                    pass
+
+        # Bracketed time only: [10:30 AM]
+        m = re_ts_bracket_time.match(line)
+        if m:
+            try:
+                time_str = m.group(1)
+                ampm = m.group(2) or ""
+                fmt = "%I:%M %p" if ampm else "%H:%M"
+                dt = datetime.strptime(f"{time_str} {ampm}".strip(), fmt)
+                # Use today's date + parsed time
+                today = date.today()
+                dt = dt.replace(year=today.year, month=today.month, day=today.day)
+                return dt.timestamp()
+            except ValueError:
+                pass
+
+        return None
+
     for line in lines:
         line = line.strip()
         if not line: continue
@@ -105,6 +205,15 @@ def parse_chat_log(log_text: str, suspect_name: str = ""):
         is_header = False
         msg_content = line
         speaker_match = None
+        
+        # Extract timestamp from the line
+        parsed_ts = _extract_timestamp(line)
+        if parsed_ts:
+            current_ts = parsed_ts
+        else:
+            # Increment by 1 second per message to maintain ordering
+            msg_counter += 1
+            current_ts = base_ts + msg_counter
         
         m_disc = re_discord.match(line)
         if m_disc:
@@ -167,7 +276,12 @@ def health_check():
     return {"status": "online", "system": "ManTacAi Forensic Engine"}
 
 @app.post("/api/analyze", response_model=AnalysisResponse)
-async def analyze_chat(request: AnalyzeRequest):
+async def analyze_chat(
+    request: AnalyzeRequest,
+    detector_model: ManipulationModel = Depends(get_detector_model),
+    semantic_analyzer: SemanticAnalyzer = Depends(get_semantic_analyzer),
+    context_engine: ContextEngine = Depends(get_context_engine),
+):
     events = parse_chat_log(request.text, request.suspect_name)
     
     if not events:
@@ -179,7 +293,8 @@ async def analyze_chat(request: AnalyzeRequest):
             primary_pattern="None",
             cycle_phase="Normal",
             darvo_score=0.0,
-            timeline=[]
+            timeline=[],
+            radar_chart_data=[]
         )
 
     processed_segments = []
@@ -301,16 +416,8 @@ async def get_full_analysis(request: dict):
     return NarrativeResponse(narrative=narrative)
 
 
-class NarrativeResponse(BaseModel):
-    narrative: str
-
-@app.post("/api/full-analysis", response_model=NarrativeResponse)
-async def get_full_analysis(request: dict):
-    narrative = generate_narrative_summary(request)
-    return NarrativeResponse(narrative=narrative)
-
 @app.post("/api/reset")
-def reset_session():
+def reset_session(context_engine: ContextEngine = Depends(get_context_engine)):
     context_engine.reset()
     return {"status": "reset", "message": "Session memory cleared."}
 

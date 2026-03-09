@@ -1,0 +1,10 @@
+# ManTacAi Backend — Production Dependencies
+torch>=2.0.0
+transformers>=4.30.0
+numpy>=1.24.0
+fastapi>=0.100.0
+uvicorn>=0.22.0
+python-multipart>=0.0.6
+spacy>=3.5.0
+python-docx>=0.8.11
+cryptography>=41.0.0

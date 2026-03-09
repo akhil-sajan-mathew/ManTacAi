@@ -1,8 +1,36 @@
-.kiro/specs/manipulation-detection-model/design.md
-.kiro/specs/manipulation-detection-model/tasks.md
-.kiro/specs/manipulation-detection-model/requirements.md
-.kiro
+# IDE & Editor
+.kiro/
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+venv/
+.venv/
+
+# Node.js
+node_modules/
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Context state (contains sensitive chat data)
+backend/context_state.json
 
 # Large model files (use Git LFS or keep locally only)
 *.pt
+*.safetensors
 models/*.pt
+
+# OS
+.DS_Store
+Thumbs.db

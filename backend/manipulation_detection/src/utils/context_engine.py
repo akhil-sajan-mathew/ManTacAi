@@ -3,6 +3,8 @@ import time
 import json
 import os
 
+from utils.encryption import save_encrypted, load_encrypted
+
 class CycleDetector:
     def __init__(self):
         self.state = "NORMAL"
@@ -157,8 +159,7 @@ class ContextEngine:
             "history": self.history_buffer
         }
         try:
-            with open(self.persistence_file, 'w') as f:
-                json.dump(data, f)
+            save_encrypted(self.persistence_file, data)
         except Exception as e:
             print(f"Failed to save context state: {e}")
 
@@ -169,10 +170,9 @@ class ContextEngine:
             return
             
         try:
-            with open(self.persistence_file, 'r') as f:
-                data = json.load(f)
-                self.detector.from_dict(data.get("detector", {}))
-                self.history_buffer = data.get("history", [])
+            data = load_encrypted(self.persistence_file)
+            self.detector.from_dict(data.get("detector", {}))
+            self.history_buffer = data.get("history", [])
         except Exception as e:
             print(f"Failed to load context state: {e}")
 

@@ -1,0 +1,56 @@
+{
+    "model_name": "ManTacAi Manipulation Tactic Detector",
+    "model_version": "1.0.0",
+    "base_model": "distilroberta-base",
+    "task": "multi-class text classification",
+    "num_labels": 18,
+    "labels": [
+        "threatening_intimidation",
+        "gaslighting",
+        "guilt_tripping",
+        "deflection",
+        "stonewalling",
+        "belittling_ridicule",
+        "love_bombing",
+        "ethical_persuasion",
+        "passive_aggression",
+        "appeal_to_emotion",
+        "whataboutism",
+        "neutral_conversation",
+        "coercive_control",
+        "benign_venting",
+        "healthy_conflict",
+        "benign_affection",
+        "neutral_logistics",
+        "urgent_emergency"
+    ],
+    "training": {
+        "framework": "Hugging Face Transformers",
+        "platform": "Kaggle (GPU T4x2)",
+        "epochs": "See kaggle_training.ipynb",
+        "max_length": 512,
+        "datasets_used": [
+            "mentalmanip_detailed.csv",
+            "gaslight_stories_train_vettednotprocessed.csv",
+            "Hate_speech.csv",
+            "Neutral_speech.csv",
+            "Positive_speech.csv",
+            "Train_Data.csv",
+            "train_sent_emo_cleaned.csv"
+        ]
+    },
+    "inference": {
+        "device": "auto (CUDA if available, else CPU)",
+        "tokenizer": "AutoTokenizer (from model checkpoint)",
+        "max_input_length": 512,
+        "output": "probability distribution over 18 labels"
+    },
+    "intended_use": "Forensic analysis of text conversations to detect manipulation tactics and psychological abuse patterns.",
+    "limitations": [
+        "Model performance depends heavily on training data quality and coverage",
+        "May produce false positives on sarcasm, humor, or informal speech",
+        "Not a substitute for professional psychological assessment",
+        "English language only"
+    ],
+    "ethical_considerations": "This model is intended as a support tool for identifying potential manipulation patterns. It should not be used as the sole basis for legal or clinical decisions."
+}

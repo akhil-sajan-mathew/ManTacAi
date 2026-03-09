@@ -21,10 +21,12 @@ class ManipulationModel:
         try:
             # Default to base model if no path provided or path doesn't exist
             if not self.model_path or not os.path.exists(self.model_path):
-                logger.warning(f"Model path {self.model_path} not found. Loading base emotion model for testing.")
-                checkpoint = "j-hartmann/emotion-english-distilroberta-base"
-            else:
-                checkpoint = self.model_path
+                raise FileNotFoundError(
+                    f"Custom model not found at '{self.model_path}'. "
+                    f"ManTacAi requires the 18-label manipulation tactic model. "
+                    f"The fallback emotion model has incompatible labels."
+                )
+            checkpoint = self.model_path
 
             self.tokenizer = AutoTokenizer.from_pretrained(checkpoint)
             self.model = AutoModelForSequenceClassification.from_pretrained(checkpoint)
@@ -77,8 +79,41 @@ class ManipulationModel:
         return result
 
     def predict_batch(self, texts):
-        """Batch prediction."""
-        results = []
-        for text in texts:
-            results.append(self.predict(text))
-        return results
+        """True batched prediction — single tokenizer + model forward pass."""
+        if not texts:
+            return []
+
+        # Filter empty texts, remember indices
+        valid_indices = [i for i, t in enumerate(texts) if t]
+        valid_texts = [texts[i] for i in valid_indices]
+
+        if not valid_texts:
+            return [{} for _ in texts]
+
+        inputs = self.tokenizer(
+            valid_texts,
+            return_tensors="pt",
+            truncation=True,
+            max_length=512,
+            padding=True,
+        ).to(self.device)
+
+        with torch.no_grad():
+            outputs = self.model(**inputs)
+            probs = torch.nn.functional.softmax(outputs.logits, dim=-1)
+
+        # Build results for valid texts
+        valid_results = []
+        for prob_row in probs:
+            result = {}
+            for i, prob in enumerate(prob_row):
+                label = self.id2label.get(i, str(i))
+                result[label] = float(prob)
+            valid_results.append(result)
+
+        # Map back to original positions (empty texts get empty dict)
+        all_results = [{} for _ in texts]
+        for idx, res in zip(valid_indices, valid_results):
+            all_results[idx] = res
+
+        return all_results
