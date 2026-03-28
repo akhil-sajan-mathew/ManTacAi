@@ -21,6 +21,7 @@ from inference.context_scoring import compute_attribution
 from inference.semantic_engine import SemanticAnalyzer
 from utils.context_engine import ContextEngine
 from utils.action_handlers.narrative_generator import generate_narrative_summary
+from utils.safety import get_contacts_for_country, COUNTRY_LIST
 
 # Dependency providers
 from dependencies import get_detector_model, get_semantic_analyzer, get_context_engine
@@ -500,6 +501,17 @@ async def get_full_analysis(request: dict):
 def reset_session(context_engine: ContextEngine = Depends(get_context_engine)):
     context_engine.reset()
     return {"status": "reset", "message": "Session memory cleared."}
+
+@app.get("/api/countries")
+def get_countries():
+    return {"countries": COUNTRY_LIST}
+
+@app.get("/api/emergency-contacts")
+def get_contacts(country: str = "India"):
+    return {
+        "country": country,
+        "contacts": get_contacts_for_country(country)
+    }
 
 if __name__ == "__main__":
     import uvicorn

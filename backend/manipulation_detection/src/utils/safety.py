@@ -11,7 +11,104 @@ SAFETY_CHECKLIST_ITEMS = [
     "This person frequently lies or denies things I know happened",
     "I feel exhausted or drained after interacting with this person"
 ]
+#start of the changes added
 
+COUNTRY_EMERGENCY_CONTACTS = {
+    "India": {
+        "Police / Emergency": "112",
+        "Women's Helpline": "1091",
+        "Domestic Violence (Kerala 'Mitra')": "181",
+        "Kerala Women's Commission": "0471-2302590",
+        "Mental Health ('Disha' Kerala)": "1056",
+    },
+    "United States": {
+        "Police / Emergency": "911",
+        "National DV Hotline": "1-800-799-7233",
+        "RAINN (Sexual Assault)": "1-800-656-4673",
+        "Crisis Text Line": "Text HOME to 741741",
+    },
+    "United Kingdom": {
+        "Police / Emergency": "999",
+        "National DV Helpline": "0808 2000 247",
+        "Rape Crisis": "0808 802 9999",
+        "Men's Advice Line": "0808 801 0327",
+    },
+    "Canada": {
+        "Police / Emergency": "911",
+        "Crisis Services Canada": "1-833-456-4566",
+        "Kids Help Phone": "1-800-668-6868",
+    },
+    "Australia": {
+        "Police / Emergency": "000",
+        "1800RESPECT": "1800 737 732",
+        "Lifeline": "13 11 14",
+    },
+    "Germany": {
+        "Police / Emergency": "110",
+        "Hilfetelefon (DV)": "08000 116 016",
+    },
+    "France": {
+        "Police / Emergency": "17",
+        "Violences Femmes Info": "3919",
+    },
+    "Pakistan": {
+        "Police / Emergency": "15",
+        "Madadgar Helpline": "1098",
+    },
+    "Bangladesh": {
+        "Police / Emergency": "999",
+        "Women's Helpline": "10921",
+    },
+    "Sri Lanka": {
+        "Police / Emergency": "119",
+        "Women In Need": "011-2671411",
+    },
+    "South Africa": {
+        "Police / Emergency": "10111",
+        "GBV Command Centre": "0800 428 428",
+    },
+    "Nigeria": {
+        "Police / Emergency": "199",
+        "WARIF Hotline": "08000-92743",
+    },
+    "Philippines": {
+        "Police / Emergency": "911",
+        "PCW Hotline": "1-343",
+    },
+    "Malaysia": {
+        "Police / Emergency": "999",
+        "Talian Kasih": "15999",
+    },
+    "Singapore": {
+        "Police / Emergency": "999",
+        "ComCare": "1800-222-0000",
+        "AWARE": "1800-777-5555",
+    },
+    "New Zealand": {
+        "Police / Emergency": "111",
+        "Are You OK (DV)": "0800 456 450",
+    },
+    "Ireland": {
+        "Police / Emergency": "999",
+        "Women's Aid": "1800 341 900",
+    },
+    "Kenya": {
+        "Police / Emergency": "999",
+        "GBV Hotline": "0800 723 253",
+    },
+    "Other / Not Listed": {
+        "Note": "Contact your local police, or search '[your country] domestic violence helpline'.",
+    },
+}
+
+COUNTRY_LIST = sorted([c for c in COUNTRY_EMERGENCY_CONTACTS if c != "Other / Not Listed"]) + ["Other / Not Listed"]
+
+
+def get_contacts_for_country(country: str = "India") -> dict:
+    """Returns contact dict for the given country. Defaults to India."""
+    return COUNTRY_EMERGENCY_CONTACTS.get(country, COUNTRY_EMERGENCY_CONTACTS["India"])
+
+#end of the changes added
 def evaluate_safety_risk(checked_items):
     """
     Evaluates safety risk based on checked checklist items.
@@ -85,7 +182,7 @@ def get_safety_resources():
     *   **Legal Aid:** [Kerala State Legal Services Authority (KELSA)](https://kelsa.nic.in/)
     """
 
-def get_dynamic_safety_plan(risk_level, detected_pattern, darvo_score):
+def get_dynamic_safety_plan(risk_level, detected_pattern, darvo_score, country="India"):
     """
     Generates a dynamic safety plan based on risk level, tactic, and DARVO score.
     """
@@ -173,14 +270,13 @@ def get_dynamic_safety_plan(risk_level, detected_pattern, darvo_score):
         """)
     
     # 5. RESOURCES
-    sections.append("""
+    # change to Dynamic contacts based on country
+    contacts = get_contacts_for_country(country)
+    contact_lines = "\n".join([f"*   **{k}:** {v}" for k, v in contacts.items()])
+    sections.append(f"""
 ---
-#### 🆘 Expert Support (India/Kerala)
-*   **Police / Emergency:** 112
-*   **Domestic Violence (Kerala 'Mitra'):** 181
-*   **Women's Helpline:** 1091
-*   **Mental Health ('Disha'):** 1056
-*   **Legal Aid:** [KELSA](https://kelsa.nic.in/) or Search "Legal Aid Kerala"
+#### 🆘 Expert Support ({country})
+{contact_lines}
     """)
 
     return plan_intro + "\n".join(sections)
