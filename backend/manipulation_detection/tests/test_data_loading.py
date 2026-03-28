@@ -95,7 +95,7 @@ class TestTextPreprocessor(unittest.TestCase):
     
     def test_clean_text_quotes(self):
         """Test quote normalization."""
-        text = ""This is a 'test' message""
+        text = """This is a 'test' message"""
         cleaned = self.preprocessor.clean_text(text)
         self.assertEqual(cleaned, '"This is a \'test\' message"')
     

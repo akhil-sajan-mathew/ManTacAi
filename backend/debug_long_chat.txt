@@ -1,0 +1,108 @@
+[0] Jordan: passive_aggression (iso=0.29, ctx=0.29) -> initiator
+      Msg: Hey, just finishing up at the library. I'll be home in about 20 mins.
+      Context Reduces? False
+
+[1] Alex: passive_aggression (iso=0.58, ctx=0.60) -> initiator
+      Msg: Okay. Drive safe.
+      Context Reduces? False
+
+[2] Jordan: benign_affection (iso=0.35, ctx=0.63) -> reactor
+      Msg: Still good for tonight? Sarah’s party starts at 8.
+      Context Reduces? False
+
+[3] Alex: stonewalling (iso=0.77, ctx=0.62) -> initiator
+      Msg: Oh. You're still going to that?
+      Context Reduces? True
+
+[4] Jordan: passive_aggression (iso=0.34, ctx=0.44) -> reactor
+      Msg: Yeah, we talked about this on Tuesday. I RSVP'd for both of us.
+      Context Reduces? False
+
+[5] Alex: guilt_tripping (iso=0.55, ctx=0.36) -> initiator
+      Msg: I don't remember agreeing to go to a loud party full of people who constantly judge me.
+      Context Reduces? True
+
+[6] Jordan: deflection (iso=0.34, ctx=0.41) -> reactor
+      Msg: They don't judge you, Alex. And you literally said 'Sounds fun, let's do it.'
+      Context Reduces? False
+
+[7] Alex: gaslighting (iso=0.32, ctx=0.32) -> initiator
+      Msg: You always twist my words. I said 'Maybe it sounds fun.' You only ever hear what you want to hear.
+      Context Reduces? False
+
+[8] Jordan: passive_aggression (iso=0.23, ctx=0.33) -> reactor
+      Msg: I really thought you agreed. I'm sorry if I misunderstood.
+      Context Reduces? False
+
+[9] Alex: passive_aggression (iso=0.65, ctx=0.30) -> initiator
+      Msg: It's fine. You go. I'll just stay here alone. I’ve had a terrible week anyway, but don't worry about me.
+      Context Reduces? True
+
+[10] Jordan: coercive_control (iso=0.57, ctx=0.32) -> reactor
+      Msg: Come on, don't say that. You know I care about your week. What happened?
+      Context Reduces? True
+
+[11] Alex: coercive_control (iso=0.79, ctx=0.24) -> initiator
+      Msg: Doesn't matter now. You've got your priorities straight. Your friends are clearly more important.
+      Context Reduces? True
+
+[12] Jordan: deflection (iso=0.44, ctx=0.35) -> reactor
+      Msg: That's not fair. I haven't seen Sarah in months.
+      Context Reduces? True
+
+[13] Alex: guilt_tripping (iso=0.29, ctx=0.31) -> initiator
+      Msg: And I haven't felt supported by you in weeks. But sure, go drink with Sarah.
+      Context Reduces? False
+
+[14] Jordan: guilt_tripping (iso=0.75, ctx=0.33) -> initiator
+      Msg: Supported? I helped you with your entire presentation yesterday!
+      Context Reduces? True
+
+[15] Alex: neutral_logistics (iso=0.35, ctx=0.46) -> reactor
+      Msg: Barely. You were looking at your phone half the time. Probably texting Sarah.
+      Context Reduces? False
+
+[16] Jordan: gaslighting (iso=0.28, ctx=0.24) -> neutral
+      Msg: I was texting my mom! Why are you doing this right now?
+      Context Reduces? False
+
+[17] Alex: guilt_tripping (iso=0.27, ctx=0.20) -> initiator
+      Msg: 'Doing this'? Wow. I express that I'm in a bad place, and suddenly I'm the bad guy 'doing something' to you. Classic Jordan.
+      Context Reduces? True
+
+[18] Jordan: passive_aggression (iso=0.57, ctx=0.33) -> reactor
+      Msg: I didn't say you're the bad guy. I just want to have a nice evening. We can both go and leave early.
+      Context Reduces? True
+
+[19] Alex: coercive_control (iso=0.55, ctx=0.19) -> initiator
+      Msg: I already told you I'm not going. Her friends always make those passive-aggressive comments about my job.
+      Context Reduces? True
+
+[20] Jordan: gaslighting (iso=0.66, ctx=0.19) -> reactor
+      Msg: Mark made one joke a year ago. He apologized.
+      Context Reduces? True
+
+[21] Alex: guilt_tripping (iso=0.51, ctx=0.46) -> initiator
+      Msg: It wasn't a joke, and you know it. But you always defend them over me. It really shows where your loyalty lies.
+      Context Reduces? False
+
+[22] Jordan: love_bombing (iso=0.86, ctx=0.27) -> initiator
+      Msg: I am loyal to you! I'm your partner. I just don't want to cancel at the last minute.
+      Context Reduces? True
+
+[23] Alex: deflection (iso=0.45, ctx=0.41) -> initiator
+      Msg: If you were actually loyal to me, you wouldn't want to hang out with people who disrespect me.
+      Context Reduces? False
+
+[24] Jordan: deflection (iso=0.38, ctx=0.26) -> reactor
+      Msg: They don't disrespect you...
+      Context Reduces? True
+
+[25] Alex: appeal_to_emotion (iso=0.72, ctx=0.45) -> initiator
+      Msg: Stop invalidating my feelings! Just because you don't see it doesn't mean it doesn't happen. You're so blind to how they treat me.
+      Context Reduces? True
+
+[26] Jordan: stonewalling (iso=0.70, ctx=0.44) -> reactor
+      Msg: Okay, okay. I'm sorry. I'm not trying to invalidate you.
+      Context Reduces? True
+

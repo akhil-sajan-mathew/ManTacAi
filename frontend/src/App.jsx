@@ -4,6 +4,7 @@ import { HolographicHUD } from './components/HolographicHUD';
 import { ChatStream } from './components/ChatStream';
 import { RiskRadar } from './components/RiskRadar';
 import { ActionButtons } from './components/ActionButtons';
+import { SpeakerAttribution } from './components/SpeakerAttribution';
 import { GlassCard } from './components/ui/GlassCard';
 import { ShieldCheck, Play, Terminal, Cpu, Trash2 } from 'lucide-react';
 
@@ -217,6 +218,9 @@ function App() {
             </div>
             <div className="lg:col-span-4 flex flex-col gap-6">
               <RiskRadar data={computedMetrics?.radar_chart_data || data?.radar_chart_data} />
+              {(computedMetrics || data) && (
+                <SpeakerAttribution attribution={computedMetrics?.speaker_attribution || data?.speaker_attribution} />
+              )}
               {(computedMetrics || data) && <ActionButtons data={computedMetrics || data} />}
             </div>
           </div>

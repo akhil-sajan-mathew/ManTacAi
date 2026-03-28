@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.join(base_dir, "manipulation_detection", "src"))
 
 from inference.model import ManipulationModel
 from inference.scoring import calculate_risk_score, calculate_darvo_score
+from inference.context_scoring import compute_attribution
 from inference.semantic_engine import SemanticAnalyzer
 from utils.context_engine import ContextEngine
 from utils.action_handlers.narrative_generator import generate_narrative_summary
@@ -112,6 +113,9 @@ class ChatSegment(BaseModel):
     timestamp_str: str
     tactic_scores: Dict[str, float] = {}
     darvo_score: float = 0.0
+    role: str = "neutral"           # "initiator" | "reactor" | "neutral"
+    initiated_risk: float = 0.0     # risk attributed to unprovoked manipulation
+    reactive_risk: float = 0.0      # risk attributed to defensive echo
 
 class AnalysisResponse(BaseModel):
     segments: List[ChatSegment]
@@ -122,6 +126,7 @@ class AnalysisResponse(BaseModel):
     darvo_score: float
     timeline: List[Dict[str, Any]]
     radar_chart_data: List[Dict[str, Any]]
+    speaker_attribution: Dict[str, Dict[str, Any]] = {}
 
 # --- UTILITIES ---
 
@@ -294,7 +299,8 @@ async def analyze_chat(
             cycle_phase="Normal",
             darvo_score=0.0,
             timeline=[],
-            radar_chart_data=[]
+            radar_chart_data=[],
+            speaker_attribution={}
         )
 
     processed_segments = []
@@ -310,6 +316,13 @@ async def analyze_chat(
         "Deflection": 0.0
     }
 
+    # Sliding window buffers for context-aware analysis
+    window_size = 3
+    window_embeddings = []   # CLS embeddings for echo detection
+    window_senders = []      # sender names for echo detection
+    window_risks = []        # calculated risk scores for attribution
+    window_labels = []       # detected tactic labels for label-based aggression detection
+
     # Context Engine Selection
     if request.stateless:
         # Fresh instance for this request (Stateless Test Mode)
@@ -318,16 +331,78 @@ async def analyze_chat(
         # Global instance (Legacy Surveillance Mode)
         active_engine = context_engine
 
-    for event in events:
+    for idx, event in enumerate(events):
         msg = event['msg']
+        sender_name = event.get('sender_name', 'Subject')
         
-        # Predict
-        preds, embedding = detector_model.predict(msg, return_embedding=True)
+        # --- DUAL-PASS PREDICTION ---
+        # Build context window (last N messages from the conversation)
+        context_msgs = [e['msg'] for e in events[max(0, idx - window_size):idx]]
+        
+        isolated_preds, contextual_preds, embedding = detector_model.predict_with_context(
+            msg, context_msgs, return_embedding=True
+        )
+        
+        # Use isolated predictions for tactic scoring (what the text SAYS)
+        preds = isolated_preds
         detected_label = max(preds, key=preds.get)
         risk = preds[detected_label]
         
         # Phase 23: Semantic Check
         sem_score, sem_concept = semantic_analyzer.check_similarity(embedding)
+        
+        # Calculate Segment Score FIRST (needed for accurate window_risks)
+        seg_risk_score, _, _, seg_tactic_scores = calculate_risk_score(
+            preds, 
+            request.context_factors, 
+            text_content=msg,
+            semantic_data=(sem_score, sem_concept)
+        )
+        
+        # --- ECHO DETECTION ---
+        echo_sim, is_echo = semantic_analyzer.check_echo(
+            embedding,
+            window_embeddings[-window_size:],
+            window_senders[-window_size:],
+            sender_name
+        )
+        
+        # --- IDENTIFY PRIMARY AGGRESSOR ---
+        # Look at all speaker profiles to find the one with the highest demonstrated severity.
+        # This prevents the system from locking onto a victim who is just reacting defensively.
+        primary_aggressor = None
+        max_severity = 0.0
+        for name, profile in active_engine.speaker_profiles.items():
+            # Severity requires at least one high-risk initiation to prevent false positives
+            severity = profile.high_risk_count + profile.avg_risk
+            if severity > max_severity and profile.high_risk_count >= 1:
+                max_severity = severity
+                primary_aggressor = name
+                
+        is_primary = (sender_name == primary_aggressor)
+        
+        # --- CONTEXT-AWARE ATTRIBUTION ---
+        # Uses seg_risk_score (calculated risk) not raw model probability
+        # Pass primary aggressor status + preceding labels for asymmetric dampening
+        attribution = compute_attribution(
+            isolated_preds=isolated_preds,
+            contextual_preds=contextual_preds,
+            preceding_risks=window_risks[-window_size:],
+            preceding_senders=window_senders[-window_size:],
+            preceding_labels=window_labels[-window_size:],
+            current_sender=sender_name,
+            is_echo=is_echo,
+            echo_similarity=echo_sim,
+            is_primary_aggressor=is_primary,
+        )
+        role = attribution["role"]
+        dampening_factor = attribution["dampening_factor"]
+        
+        # Update sliding window buffers AFTER using them
+        window_embeddings.append(embedding)
+        window_senders.append(sender_name)
+        window_risks.append(seg_risk_score)
+        window_labels.append(detected_label)
         
         # Max-Score Aggregation for Radar
         radar_metrics["Gaslighting"] = max(radar_metrics["Gaslighting"], preds.get("gaslighting", 0))
@@ -341,16 +416,14 @@ async def analyze_chat(
         for k, v in preds.items():
             aggregated_preds[k] = max(aggregated_preds.get(k, 0), v)
             
-        # Update Context Logic
-        active_engine.add_event(msg, detected_label, risk, timestamp=event['ts'])
+        # Update Context Logic (use calculated risk, not raw probability)
+        active_engine.add_event(msg, detected_label, seg_risk_score, timestamp=event['ts'])
         
-        # Calculate Segment Score
-        seg_risk_score, _, _, seg_tactic_scores = calculate_risk_score(
-            preds, 
-            request.context_factors, 
-            text_content=msg,
-            semantic_data=(sem_score, sem_concept)
-        )
+        # Update Speaker Profile (use calculated risk for accurate tracking)
+        active_engine.update_speaker_profile(sender_name, detected_label, seg_risk_score, role)
+        
+        # Apply context-aware dampening to reactor risk
+        adjusted_risk = seg_risk_score * dampening_factor
         
         # Calculate Segment DARVO Contribution
         seg_darvo = calculate_darvo_score(seg_tactic_scores, msg)
@@ -359,17 +432,20 @@ async def analyze_chat(
             msg=msg,
             ts=event['ts'],
             sender=event['sender'],
-            sender_name=event.get('sender_name', 'Subject'),
-            risk_score=seg_risk_score, 
+            sender_name=sender_name,
+            risk_score=adjusted_risk, 
             label=detected_label,
             timestamp_str=datetime.fromtimestamp(event['ts']).strftime("%H:%M"),
             tactic_scores=seg_tactic_scores,
-            darvo_score=seg_darvo
+            darvo_score=seg_darvo,
+            role=role,
+            initiated_risk=attribution["initiated_risk"],
+            reactive_risk=attribution["reactive_risk"]
         ))
         
         history_risk.append({
             "time": datetime.fromtimestamp(event['ts']).strftime("%H:%M"), 
-            "risk": seg_risk_score
+            "risk": adjusted_risk
         })
 
     # Final Metrics
@@ -381,6 +457,9 @@ async def analyze_chat(
     darvo = calculate_darvo_score(aggregated_preds, full_text_blob)
     
     running_state = active_engine.detector.state
+    
+    # Get Speaker Attribution
+    speaker_attribution = active_engine.get_speaker_profiles()
     
     # Format Radar Data for Recharts
     formatted_radar = [
@@ -400,7 +479,8 @@ async def analyze_chat(
         cycle_phase=running_state,
         darvo_score=darvo,
         timeline=history_risk,
-        radar_chart_data=formatted_radar
+        radar_chart_data=formatted_radar,
+        speaker_attribution=speaker_attribution
     )
 
 class NarrativeResponse(BaseModel):

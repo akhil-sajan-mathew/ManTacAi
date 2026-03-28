@@ -51,11 +51,20 @@ export function ChatStream({ segments }) {
 function ChatBubble({ segment, index }) {
     // Robust check for "Me"
     const isMe = segment.sender === 'victim';
-    // const isSuspect = segment.sender === 'suspect'; // Not explicitly used for layout, just styling
     const isHighRisk = segment.risk_score > 0.7;
+    const role = segment.role || 'neutral';
+    const isInitiator = role === 'initiator';
+    const isReactor = role === 'reactor';
 
     const senderName = segment.sender_name || (isMe ? 'You' : 'Unknown');
     const initial = senderName.charAt(0).toUpperCase();
+
+    // Left border color based on role
+    const roleBorderClass = isInitiator && segment.risk_score > 0.3
+        ? 'border-l-2 border-l-red-500'
+        : isReactor
+            ? 'border-l-2 border-l-amber-500/60'
+            : '';
 
     return (
         <motion.div
@@ -77,7 +86,7 @@ function ChatBubble({ segment, index }) {
             )}
 
             <div className={`
-        relative max-w-[80%] rounded-2xl p-4 border backdrop-blur-md shadow-lg
+        relative max-w-[80%] rounded-2xl p-4 border backdrop-blur-md shadow-lg ${roleBorderClass}
         ${isMe
                     ? 'bg-slate-900/60 border-neon-cyan/30 text-slate-200 rounded-tr-sm'
                     : isHighRisk
@@ -105,12 +114,24 @@ function ChatBubble({ segment, index }) {
                     {segment.msg}
                 </p>
 
-                {/* Detection Tag Footer */}
+                {/* Detection Tag Footer + Role Badge */}
                 {!isMe && segment.label && segment.risk_score > 0.4 && (
                     <div className={`mt-3 pt-2 border-t ${isHighRisk ? 'border-red-500/20' : 'border-slate-700/30'} flex justify-between items-center`}>
-                        <span className={`text-[10px] uppercase font-bold ${isHighRisk ? 'text-neon-red' : 'text-slate-400'}`}>
-                            Detected: {segment.label.replace(/_/g, " ")}
-                        </span>
+                        <div className="flex items-center gap-2">
+                            <span className={`text-[10px] uppercase font-bold ${isHighRisk ? 'text-neon-red' : 'text-slate-400'}`}>
+                                Detected: {segment.label.replace(/_/g, " ")}
+                            </span>
+                            {isInitiator && (
+                                <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/30">
+                                    ⚡ initiated
+                                </span>
+                            )}
+                            {isReactor && (
+                                <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400/80 border border-amber-500/25">
+                                    🛡️ reactive
+                                </span>
+                            )}
+                        </div>
                         <div className="h-1 w-16 bg-black/50 rounded-full overflow-hidden">
                             <div
                                 className={`h-full ${isHighRisk ? 'bg-neon-red' : 'bg-neon-purple'}`}

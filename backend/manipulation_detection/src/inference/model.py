@@ -78,6 +78,137 @@ class ManipulationModel:
             return result, embedding
         return result
 
+    def predict_with_context(self, text, context_messages=None, return_embedding=False):
+        """
+        Dual-pass prediction with sliding context window.
+        
+        Pass 1 (isolated):   classify target text alone → baseline prediction
+        Pass 2 (contextual): classify with preceding messages prepended → context-aware prediction
+        
+        Args:
+            text (str): Target message to classify
+            context_messages (list[str]): Last N messages (oldest first), typically 3-4
+            return_embedding (bool): Whether to return the CLS embedding from Pass 1
+            
+        Returns:
+            tuple: (isolated_preds, contextual_preds, embedding_or_None)
+                   - isolated_preds: {label: prob} from classifying text alone
+                   - contextual_preds: {label: prob} from classifying with context
+                   - embedding: CLS embedding from Pass 1 (for semantic echo detection)
+        """
+        # Pass 1: Isolated prediction (always needed as baseline)
+        if return_embedding:
+            isolated_preds, embedding = self.predict(text, return_embedding=True)
+        else:
+            isolated_preds = self.predict(text, return_embedding=False)
+            embedding = None
+        
+        # If no context provided, contextual = isolated
+        if not context_messages or len(context_messages) == 0:
+            return isolated_preds, isolated_preds, embedding
+        
+        # Pass 2: Contextual prediction
+        context_input = self._build_context_input(text, context_messages)
+        contextual_preds = self.predict(context_input, return_embedding=False)
+        
+        return isolated_preds, contextual_preds, embedding
+
+    def _build_context_input(self, target_text, context_messages, max_tokens=512):
+        """
+        Builds a context-aware input string with smart token-budget truncation.
+        
+        Format: "[CTX] msg1 </s> msg2 </s> msg3 </s> [CUR] target_text"
+        
+        Token budget:
+          - Target gets at least 256 tokens (non-negotiable)
+          - Context fills the remaining budget, newest messages first
+          - Oversized context messages keep only first + last sentence
+          
+        Args:
+            target_text (str): The message being classified
+            context_messages (list[str]): Previous messages, oldest first
+            max_tokens (int): Model's max sequence length
+            
+        Returns:
+            str: Formatted input string
+        """
+        sep = self.tokenizer.sep_token  # </s> for RoBERTa
+        
+        # Compute target token count
+        target_tokens = self.tokenizer.encode(target_text, add_special_tokens=False)
+        target_token_count = len(target_tokens)
+        
+        # Reserve space: target gets at least 256 tokens, plus special tokens overhead (~4)
+        min_target_budget = 256
+        special_tokens_overhead = 4  # <s>, </s>, and markers
+        target_budget = max(min_target_budget, target_token_count)
+        context_budget = max_tokens - target_budget - special_tokens_overhead
+        
+        if context_budget <= 10:
+            # Not enough room for meaningful context, skip
+            return target_text
+        
+        # Fill context budget from newest → oldest (reversed iteration)
+        selected_context = []
+        tokens_used = 0
+        per_msg_budget = context_budget // max(len(context_messages), 1)
+        
+        for msg in reversed(context_messages):
+            msg_tokens = self.tokenizer.encode(msg, add_special_tokens=False)
+            msg_token_count = len(msg_tokens)
+            
+            # Check if this message fits in remaining budget
+            remaining = context_budget - tokens_used
+            if remaining <= 5:
+                break  # No more room
+            
+            if msg_token_count <= remaining:
+                # Fits entirely
+                selected_context.insert(0, msg)
+                tokens_used += msg_token_count + 1  # +1 for sep token
+            elif remaining >= 20:
+                # Too long but we have some room — keep first + last sentence
+                truncated = self._truncate_keep_edges(msg, remaining)
+                selected_context.insert(0, truncated)
+                tokens_used += remaining
+                break  # Budget exhausted
+            else:
+                break  # Not enough room for a useful truncation
+        
+        if not selected_context:
+            return target_text
+        
+        # Build final string: [CTX] msg1 </s> msg2 </s> [CUR] target
+        context_str = f" {sep} ".join(selected_context)
+        return f"[CTX] {context_str} {sep} [CUR] {target_text}"
+
+    def _truncate_keep_edges(self, text, max_tokens):
+        """
+        Truncates a long message by keeping the first and last sentence.
+        The first sentence typically contains the 'hook' and the last contains
+        the 'threat' or 'conclusion' — both carry the highest forensic signal.
+        """
+        sentences = text.replace('! ', '!|').replace('. ', '.|').replace('? ', '?|').split('|')
+        sentences = [s.strip() for s in sentences if s.strip()]
+        
+        if len(sentences) <= 2:
+            # Already short enough or can't split further, just hard-truncate
+            tokens = self.tokenizer.encode(text, add_special_tokens=False)[:max_tokens]
+            return self.tokenizer.decode(tokens, skip_special_tokens=True)
+        
+        first = sentences[0]
+        last = sentences[-1]
+        combined = f"{first} ... {last}"
+        
+        # Verify it fits
+        combined_tokens = self.tokenizer.encode(combined, add_special_tokens=False)
+        if len(combined_tokens) <= max_tokens:
+            return combined
+        
+        # Still too long, hard-truncate
+        tokens = self.tokenizer.encode(text, add_special_tokens=False)[:max_tokens]
+        return self.tokenizer.decode(tokens, skip_special_tokens=True)
+
     def predict_batch(self, texts):
         """True batched prediction — single tokenizer + model forward pass."""
         if not texts:

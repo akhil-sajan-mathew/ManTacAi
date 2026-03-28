@@ -30,7 +30,8 @@ export function useComputedMetrics(data, selectedSuspect) {
                 senders: ['All', ...senders],
                 segments: [],
                 darvo_score: 0,
-                cycle_phase: data.cycle_phase || "Normal"
+                cycle_phase: data.cycle_phase || "Normal",
+                speaker_attribution: data.speaker_attribution || {}
             };
         }
 
@@ -47,6 +48,13 @@ export function useComputedMetrics(data, selectedSuspect) {
             finalRiskInput = maxRisk; // Snap to Critical if THIS USER made a threat
         } else if (maxRisk > 0.60) {
             finalRiskInput = Math.max(avgRisk, 0.60); // Snap to Warning
+        }
+
+        // RISK FLOOR: In "All" view, the global risk must never go below the
+        // server's undampened calculation (from aggregated tactic peaks).
+        // This prevents dampened reactor scores from diluting critical peaks.
+        if (selectedSuspect === 'All' && data.risk_score) {
+            finalRiskInput = Math.max(finalRiskInput, data.risk_score);
         }
 
         // Determine Level
@@ -117,7 +125,8 @@ export function useComputedMetrics(data, selectedSuspect) {
             senders: ['All', ...senders],
             segments: activeSegments,
             darvo_score: maxDarvo,
-            cycle_phase: localPhase
+            cycle_phase: localPhase,
+            speaker_attribution: data.speaker_attribution || {}
         };
     }, [data, selectedSuspect]);
 }

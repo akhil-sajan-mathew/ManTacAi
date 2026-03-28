@@ -63,33 +63,29 @@ export function HelplineModal({ isOpen, onClose }) {
                         <div className="p-4 rounded-xl bg-slate-900/50 border border-slate-700/50 flex items-start gap-4">
                             <Phone className="text-teal-400 mt-1" size={20} aria-hidden="true" />
                             <div>
-                                <h3 className="font-orbitron text-teal-300 font-semibold mb-1">National Domestic Violence Hotline (US)</h3>
+                                <h3 className="font-orbitron text-teal-300 font-semibold mb-1">National Women's Helpline (India)</h3>
                                 <p className="text-3xl font-orbitron font-bold text-white mb-2 tracking-wider">
-                                    <a href="tel:+18007997233" aria-label="Call National Domestic Violence Hotline at 800-799-7233">800-799-7233</a>
+                                    <a href="tel:181" aria-label="Call National Women's Helpline at 181">181</a>
                                 </p>
-                                <p className="text-sm text-slate-400">SMS: Text <span className="text-slate-200">"START"</span> to <span className="text-slate-200">88788</span></p>
+                                <p className="text-sm text-slate-400">Police Emergency: <span className="text-slate-200">112</span> | Women Police: <span className="text-slate-200">1091</span></p>
                             </div>
                         </div>
 
                         <div className="p-4 rounded-xl bg-slate-900/50 border border-slate-700/50 flex items-start gap-4">
                             <Globe className="text-blue-400 mt-1" size={20} aria-hidden="true" />
                             <div>
-                                <h3 className="font-orbitron text-blue-300 font-semibold mb-1">International Resources</h3>
-                                <a
-                                    href="https://hotline.org/"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-white hover:text-blue-300 underline underline-offset-4 decoration-blue-500/50 transition-colors"
-                                >
-                                    Visit The Hotline Directory
-                                </a>
-                                <p className="text-sm text-slate-400 mt-2">Find localized support numbers and secure chat services.</p>
+                                <h3 className="font-orbitron text-blue-300 font-semibold mb-1">Kerala State Resources</h3>
+                                <div className="space-y-2">
+                                    <p className="text-sm text-slate-400">Mitra 181 (Kerala): <a href="tel:181" className="text-white hover:text-blue-300 transition-colors font-medium">181</a></p>
+                                    <p className="text-sm text-slate-400">Kerala Women's Commission: <a href="tel:04712300509" className="text-white hover:text-blue-300 transition-colors font-medium">0471-2300509</a></p>
+                                    <p className="text-sm text-slate-400">Aparajitha is cyber support for women: <a href="mailto:aparajitha.pol@kerala.gov.in" className="text-white hover:text-blue-300 transition-colors font-medium">aparajitha.pol@kerala.gov.in</a></p>
+                                </div>
                             </div>
                         </div>
                     </div>
 
                     <div className="mt-6 text-xs text-slate-500 font-sans text-center relative z-10">
-                        If you are in immediate physical danger, please contact your local emergency services (e.g., 911 in the US/Canada, 999 in the UK, 112 in Europe).
+                        If you are in immediate physical danger, please contact local emergency services immediately (Dial 112).
                     </div>
                 </GlassCard>
             </div>

@@ -132,3 +132,50 @@ class SemanticAnalyzer:
         contrastive_score = max_danger_sim - safe_sim
         
         return contrastive_score, max_concept
+
+    def check_echo(self, target_embedding, window_embeddings, window_senders, current_sender):
+        """
+        Detects linguistic mirroring (defensive echo) by comparing the target
+        message's embedding against embeddings from OTHER speakers in the
+        context window.
+        
+        A high cosine similarity between a victim's message and the preceding
+        attacker's message indicates the victim is parroting the attacker's
+        language (e.g., attacker: "You're always the problem" → victim:
+        "Fine, I'm the problem then").
+        
+        Args:
+            target_embedding (np.ndarray): CLS embedding of the current message
+            window_embeddings (list[np.ndarray]): Embeddings of preceding messages
+            window_senders (list[str]): Sender names of preceding messages
+            current_sender (str): Sender of the current message
+            
+        Returns:
+            tuple: (max_similarity: float, is_echo: bool)
+                - max_similarity: highest cosine sim to a different speaker's message
+                - is_echo: True if similarity exceeds the echo threshold (0.75)
+        """
+        if target_embedding is None or not window_embeddings or not window_senders:
+            return 0.0, False
+        
+        target_vec = self._normalize(target_embedding)
+        echo_threshold = 0.75
+        
+        max_sim = 0.0
+        
+        for i, (emb, sender) in enumerate(zip(window_embeddings, window_senders)):
+            # Only compare against DIFFERENT speakers
+            if sender == current_sender:
+                continue
+            
+            if emb is None:
+                continue
+            
+            other_vec = self._normalize(emb)
+            sim = float(np.dot(target_vec, other_vec))
+            
+            if sim > max_sim:
+                max_sim = sim
+        
+        return max_sim, max_sim >= echo_threshold
+

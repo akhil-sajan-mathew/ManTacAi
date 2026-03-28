@@ -155,7 +155,42 @@ def generate_narrative_summary(metrics: dict) -> str:
     phase_text = phase_descriptions.get(phase_upper, f"Current phase: {cycle_phase}.")
     sections.append(f"## Cycle Phase\n\n{phase_text}")
     
-    # ─── SECTION 6: RECOMMENDATIONS ───
+    # ─── SECTION 6: POWER DYNAMICS (Speaker Attribution) ───
+    speaker_attr = metrics.get('speaker_attribution', {})
+    if speaker_attr and len(speaker_attr) >= 2:
+        dynamics_lines = []
+        for name, profile in sorted(speaker_attr.items(), key=lambda x: x[1].get('initiation_ratio', 0), reverse=True):
+            init_ratio = profile.get('initiation_ratio', 0)
+            react_count = profile.get('reaction_count', 0)
+            init_count = profile.get('initiation_count', 0)
+            total_flagged = init_count + react_count
+            diversity = profile.get('tactic_diversity', 0)
+            
+            if total_flagged == 0:
+                dynamics_lines.append(f"**{name}** — No manipulative behavior flagged.")
+                continue
+            
+            init_pct = round(init_ratio * 100)
+            if init_ratio > 0.6:
+                dynamics_lines.append(
+                    f"**{name}** — Initiated **{init_pct}%** of manipulative exchanges "
+                    f"using **{diversity}** distinct tactics. This suggests a dominant aggressor role."
+                )
+            elif init_ratio < 0.4:
+                react_pct = round((1 - init_ratio) * 100)
+                dynamics_lines.append(
+                    f"**{name}** — **{react_pct}%** of flagged messages were reactive, "
+                    f"suggesting defensive behavior rather than independent manipulation."
+                )
+            else:
+                dynamics_lines.append(
+                    f"**{name}** — Roughly balanced between initiation ({init_pct}%) "
+                    f"and reaction, indicating mutual conflict dynamics."
+                )
+        
+        sections.append("## Power Dynamics\n\n" + "\n\n".join(dynamics_lines))
+    
+    # ─── SECTION 7: RECOMMENDATIONS ───
     if risk_level in ['CRITICAL', 'HIGH']:
         rec = (
             "- **Document everything** — save screenshots, timestamps, and context\n"
