@@ -16,6 +16,7 @@ class SpeakerProfile:
         self.neutral_count = 0         # times flagged as neutral
         self.tactic_set = set()        # unique tactic labels used
         self.total_risk_sum = 0.0      # for computing average risk
+        self.peak_risk = 0.0           # highest single-message risk ever recorded
         self.first_strike_count = 0    # first toxic msg in an exchange window
 
     @property
@@ -38,6 +39,7 @@ class SpeakerProfile:
         """Update profile with a new classified message."""
         self.message_count += 1
         self.total_risk_sum += risk_score
+        self.peak_risk = max(self.peak_risk, risk_score)
 
         if risk_score > 0.5:
             self.high_risk_count += 1
@@ -66,6 +68,7 @@ class SpeakerProfile:
             "neutral_count": self.neutral_count,
             "tactic_set": list(self.tactic_set),
             "total_risk_sum": self.total_risk_sum,
+            "peak_risk": self.peak_risk,
             "first_strike_count": self.first_strike_count,
             "initiation_ratio": self.initiation_ratio,
             "tactic_diversity": self.tactic_diversity,
@@ -82,6 +85,8 @@ class SpeakerProfile:
         profile.neutral_count = data.get("neutral_count", 0)
         profile.tactic_set = set(data.get("tactic_set", []))
         profile.total_risk_sum = data.get("total_risk_sum", 0.0)
+        # Backward-compatible: fall back to avg_risk if peak_risk not in persisted data
+        profile.peak_risk = data.get("peak_risk", profile.avg_risk)
         profile.first_strike_count = data.get("first_strike_count", 0)
         return profile
 

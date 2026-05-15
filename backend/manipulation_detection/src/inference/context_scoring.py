@@ -156,6 +156,22 @@ def compute_attribution(
                 "reactive_risk": 0.0,
             }
 
+    # ─── GATE 4.5: DARVO ESCALATION — Mild confrontation followed by manipulation ───
+    # When a victim calmly raises an issue (low preceding risk) and the current
+    # speaker responds with a clear offensive tactic, that's escalation, not defense.
+    # Threshold set to 0.6 to avoid false positives in genuine mutual conflict.
+    if other_speaker_was_aggressive and isolated_top_label in OFFENSIVE_TACTICS:
+        preceding_nonzero = [r for r in preceding_risks[-3:] if r > 0]
+        preceding_was_mild = all(r < 0.5 for r in preceding_nonzero) if preceding_nonzero else False
+        current_is_clearly_manipulative = isolated_top_score > 0.6
+        if preceding_was_mild and current_is_clearly_manipulative:
+            return {
+                "role": "initiator",
+                "dampening_factor": 1.0,
+                "initiated_risk": isolated_top_score,
+                "reactive_risk": 0.0,
+            }
+
     # ─── GATE 5: Defensive/ambiguous tactics after aggression → reactor ───
     if other_speaker_was_aggressive and isolated_top_label in DEFENSIVE_TACTICS:
         base_dampening = 0.2

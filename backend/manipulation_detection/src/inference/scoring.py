@@ -69,6 +69,19 @@ def calculate_risk_score(predictions, context_factors=None, text_content="", sem
     # Simple approach: Max probability weighted by severity
     risk_score = max_prob * severity_weights.get(primary_pattern, 0.5)
     
+    # --- COMPOUND MANIPULATION SYNERGY BOOST ---
+    # When multiple high-severity tactics co-occur above a confidence threshold,
+    # apply a targeted multiplier (consistent with DARVO synergy logic).
+    # Only activates for genuine compound abuse — does not affect single-tactic detection.
+    high_severity_tactics = [
+        label for label, prob in predictions.items()
+        if prob > 0.25 and severity_weights.get(label, 0) >= 0.8
+    ]
+    if len(high_severity_tactics) >= 3:
+        risk_score = min(risk_score * 1.5, 1.0)  # Full compound — near-unreachable with softmax
+    elif len(high_severity_tactics) >= 2:
+        risk_score = min(risk_score * 1.2, 1.0)  # Dual high-severity compound
+    
     # --- CONTEXT MODIFIERS (Phase 7) ---
     if context_factors:
         current_risk_float = float(risk_score)

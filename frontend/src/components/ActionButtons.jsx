@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BarChart2, Download, Phone, Loader2, ChevronUp } from 'lucide-react';
 import { GlassCard } from './ui/GlassCard';
 import { HelplineModal } from './HelplineModal';
@@ -71,6 +71,13 @@ export function ActionButtons({ data }) {
     const [narrative, setNarrative] = useState(null);
     const [isAnalysisOpen, setIsAnalysisOpen] = useState(false);
     const [isHelplineOpen, setIsHelplineOpen] = useState(false);
+
+    // Auto-open helpline modal when backend detects a genuine emergency
+    useEffect(() => {
+        if (data?.emergency_flag) {
+            setIsHelplineOpen(true);
+        }
+    }, [data?.emergency_flag]);
 
     const handleFullAnalysis = async () => {
         // Toggle: if already open, close it

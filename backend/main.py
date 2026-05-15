@@ -2,6 +2,7 @@ import sys
 import os
 import re
 import time
+import math
 from datetime import datetime, date
 from typing import List, Optional, Dict, Any
 from fastapi import FastAPI, HTTPException, Depends, Request
@@ -117,6 +118,7 @@ class ChatSegment(BaseModel):
     role: str = "neutral"           # "initiator" | "reactor" | "neutral"
     initiated_risk: float = 0.0     # risk attributed to unprovoked manipulation
     reactive_risk: float = 0.0      # risk attributed to defensive echo
+    emergency_flag: bool = False    # True if urgent_emergency detected with high confidence
 
 class AnalysisResponse(BaseModel):
     segments: List[ChatSegment]
@@ -128,6 +130,7 @@ class AnalysisResponse(BaseModel):
     timeline: List[Dict[str, Any]]
     radar_chart_data: List[Dict[str, Any]]
     speaker_attribution: Dict[str, Dict[str, Any]] = {}
+    emergency_flag: bool = False    # True if any segment flagged as emergency
 
 # --- UTILITIES ---
 
@@ -375,7 +378,7 @@ async def analyze_chat(
         max_severity = 0.0
         for name, profile in active_engine.speaker_profiles.items():
             # Severity requires at least one high-risk initiation to prevent false positives
-            severity = profile.high_risk_count + profile.avg_risk
+            severity = profile.high_risk_count + profile.peak_risk
             if severity > max_severity and profile.high_risk_count >= 1:
                 max_severity = severity
                 primary_aggressor = name
@@ -429,6 +432,22 @@ async def analyze_chat(
         # Calculate Segment DARVO Contribution
         seg_darvo = calculate_darvo_score(seg_tactic_scores, msg)
         
+        # Emergency detection: flag if model is highly confident this is urgent_emergency
+        seg_emergency = preds.get("urgent_emergency", 0) > 0.75
+        
+        # Emergency keyword fallback: catches genuine emergencies the model misses
+        if not seg_emergency:
+            emergency_keywords = [
+                r"call the police", r"call 911", r"call 112", r"need help now",
+                r"please help me", r"he'?s breaking", r"breaking the door",
+                r"someone help", r"locked myself in",
+                r"get out of here", r"please come now",
+            ]
+            msg_lower = msg.lower()
+            keyword_hits = sum(1 for p in emergency_keywords if re.search(p, msg_lower))
+            if keyword_hits >= 2:  # Require 2+ matches to reduce false positives
+                seg_emergency = True
+        
         processed_segments.append(ChatSegment(
             msg=msg,
             ts=event['ts'],
@@ -441,7 +460,8 @@ async def analyze_chat(
             darvo_score=seg_darvo,
             role=role,
             initiated_risk=attribution["initiated_risk"],
-            reactive_risk=attribution["reactive_risk"]
+            reactive_risk=attribution["reactive_risk"],
+            emergency_flag=seg_emergency
         ))
         
         history_risk.append({
@@ -450,17 +470,64 @@ async def analyze_chat(
         })
 
     # Final Metrics
+    # Preserve calculate_risk_score call for level + final_pattern derivation
     final_text_blob = "\n".join([e['msg'] for e in events])
-    final_risk, level, final_pattern, _ = calculate_risk_score(aggregated_preds, request.context_factors, text_content=final_text_blob)
+    _, level, final_pattern, _ = calculate_risk_score(aggregated_preds, request.context_factors, text_content=final_text_blob)
     
-    # Concatenate all text for DARVO analysis
-    full_text_blob = "\n".join([e['msg'] for e in events])
-    darvo = calculate_darvo_score(aggregated_preds, full_text_blob)
+    # --- PER-SPEAKER DAMPENED RISK AGGREGATION ---
+    # Override final_risk with per-speaker aggregated dampened risks.
+    # This ensures victim's dampened scores don't inflate conversation risk,
+    # while the primary aggressor's undampened spike dominates.
+    def _pop_std(values):
+        """Population standard deviation without numpy dependency."""
+        if len(values) <= 1:
+            return 0.0
+        mean = sum(values) / len(values)
+        return math.sqrt(sum((v - mean) ** 2 for v in values) / len(values))
+    
+    speaker_risks = {}  # {sender_name: [adjusted_risk, ...]}
+    for seg in processed_segments:
+        speaker_risks.setdefault(seg.sender_name, []).append(seg.risk_score)
+    
+    per_speaker_aggregated = []
+    for speaker_name, risks in speaker_risks.items():
+        if len(risks) <= 2:
+            # Too few messages for statistical aggregation — use spike directly
+            per_speaker_aggregated.append(max(risks))
+        else:
+            max_risk = max(risks)
+            mean_risk = sum(risks) / len(risks)
+            std_risk = _pop_std(risks)
+            # Spike-weighted (0.7) vs pattern-weighted (0.3) blend
+            per_speaker_aggregated.append(
+                max(0.7 * max_risk, 0.3 * mean_risk + std_risk)
+            )
+    
+    # Conversation risk = worst speaker's aggregated risk
+    final_risk = max(per_speaker_aggregated) if per_speaker_aggregated else 0.0
+    
+    # Recalculate level from aggregated final_risk (overrides the one from calculate_risk_score)
+    if final_risk > 0.8:
+        level = "Critical"
+    elif final_risk > 0.6:
+        level = "High"
+    elif final_risk > 0.3:
+        level = "Medium"
+    else:
+        level = "Low"
+    
+    # Conversation-level DARVO: use max of per-segment DARVO scores.
+    # Using aggregated_preds would accumulate noise from unrelated messages
+    # and inflate the DARVO score for benign conversations.
+    darvo = max((seg.darvo_score for seg in processed_segments), default=0.0)
     
     running_state = active_engine.detector.state
     
     # Get Speaker Attribution
     speaker_attribution = active_engine.get_speaker_profiles()
+    
+    # Conversation-level emergency flag: True if ANY segment flagged
+    conversation_emergency = any(seg.emergency_flag for seg in processed_segments)
     
     # Format Radar Data for Recharts
     formatted_radar = [
@@ -481,7 +548,8 @@ async def analyze_chat(
         darvo_score=darvo,
         timeline=history_risk,
         radar_chart_data=formatted_radar,
-        speaker_attribution=speaker_attribution
+        speaker_attribution=speaker_attribution,
+        emergency_flag=conversation_emergency
     )
 
 class NarrativeResponse(BaseModel):
